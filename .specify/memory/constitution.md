@@ -1,5 +1,14 @@
 <!--
 Sync Impact Report
+- Version change: 1.0.0 → 1.1.0 (MINOR: materially expanded Principle II)
+- Modified principles:
+  - II. Configuration, Not Hardcoding (YAML): adds config storage location
+    (`~/.config/local-machine` default, overridable via shared `--config-dir` parameter)
+- Added sections: none
+- Removed sections: none
+- CLAUDE.md updated in the same change (Governance sync rule)
+
+Previous report (1.0.0):
 - Version change: (unversioned template) → 1.0.0
 - Source: derived from /home/kostadis/src/local_machine/CLAUDE.md
 - Principles (all new):
@@ -35,6 +44,11 @@ Machine-specific facts — IP addresses, hostnames, paths, credentials reference
 other value that describes this particular virtual machine — MUST live in configuration
 files, never in source code. Configuration files MUST be YAML. Code MAY ship defaults only
 for values that are not machine-specific.
+
+Configuration MUST be stored in a configuration directory whose default is
+`~/.config/local-machine`. The location is a parameter, not a constant: every subcommand
+that reads configuration MUST accept the same `--config-dir` parameter (Principle III) to
+override the default, and MUST NOT read configuration from any other location.
 
 Rationale: the tools describe *how* to manage a machine; the config describes *which*
 machine. Keeping them apart lets the same binary manage a rebuilt or replacement VM by
@@ -91,7 +105,7 @@ locally; no remote hosting is assumed by this constitution.
   versioned semantically: MAJOR for removed or redefined principles, MINOR for added
   principles or sections or materially expanded guidance, PATCH for clarifications.
 - Every review of a new subcommand MUST verify: it hangs off `local-machine` (I), contains no
-  machine-specific literals (II), reuses existing parameter names (III), is Rust (IV), and
+  machine-specific literals and reads config only from `--config-dir` (II), reuses existing parameter names (III), is Rust (IV), and
   targets Ubuntu only (V).
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
+**Version**: 1.1.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30

@@ -4,6 +4,8 @@ Having said that the specifics of the particular machine (ip address, etc) will 
 
 The configuration files will use yaml.
 
+Configuration is stored in ~/.config/local-machine by default. The location is a parameter (`--config-dir`), shared by every sub-command that reads configuration.
+
 The tools will assume an ubuntu linux system. 
 
 There will be a local repo
