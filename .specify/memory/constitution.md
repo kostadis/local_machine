@@ -1,5 +1,10 @@
 <!--
 Sync Impact Report
+- Version change: 1.2.0 → 1.2.1 (PATCH: Principle I lists `setup` as a shared verb)
+- Modified principles: I. Single Entry Point (shared-verb list; no rule change)
+- Added/removed sections: none
+
+Previous report (1.2.0):
 - Version change: 1.1.0 → 1.2.0 (MINOR: materially expanded Principle I)
 - Modified principles:
   - I. Single Entry Point: adds command grammar `local-machine <subcommand> <action>`,
@@ -47,12 +52,15 @@ separate user-facing entry point. Every subcommand MUST be discoverable from
 The command grammar is `local-machine <subcommand> <action> [parameters]`:
 
 - A **subcommand** names one capability (e.g. `export`) and is a group, not a single verb.
-- An **action** is a verb under that subcommand (e.g. `start`, `status`, `stop`). The
+- An **action** is a verb under that subcommand (e.g. `setup`, `start`, `status`, `stop`). The
   operations on a capability MUST be actions of its one subcommand, not sibling
   subcommands (no `unexport`, `export-status`) and not mode-selecting flags
   (no `export --stop`).
-- Actions that mean the same thing across subcommands MUST use the same verb
-  (e.g. every subcommand with a lifecycle uses `start` / `status` / `stop`).
+- Actions that mean the same thing across subcommands MUST use the same verb. Shared
+  verbs so far:
+  - `setup` — install and configure everything the capability needs (may need sudo);
+    the only action that installs software; idempotent.
+  - `start` / `status` / `stop` — lifecycle of a running capability.
 - Every feature spec MUST name its subcommand and list its actions.
 
 Rationale: one command makes the full toolset discoverable without remembering where each
@@ -129,4 +137,4 @@ locally; no remote hosting is assumed by this constitution.
   machine-specific literals and reads config only from `--config-dir` (II), reuses existing parameter names (III), is Rust (IV), and
   targets Ubuntu only (V).
 
-**Version**: 1.2.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
+**Version**: 1.2.1 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
