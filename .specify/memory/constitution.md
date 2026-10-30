@@ -1,5 +1,14 @@
 <!--
 Sync Impact Report
+- Version change: 1.1.0 → 1.2.0 (MINOR: materially expanded Principle I)
+- Modified principles:
+  - I. Single Entry Point: adds command grammar `local-machine <subcommand> <action>`,
+    shared action verbs, and the requirement that specs name their subcommand and actions
+- Added sections: none
+- Removed sections: none
+- CLAUDE.md updated in the same change (Governance sync rule)
+
+Previous report (1.1.0):
 - Version change: 1.0.0 → 1.1.0 (MINOR: materially expanded Principle II)
 - Modified principles:
   - II. Configuration, Not Hardcoding (YAML): adds config storage location
@@ -34,6 +43,17 @@ All scripts and tools in this project MUST be reachable as subcommands of one to
 command named `local-machine`. No standalone binaries or loose scripts may be added as a
 separate user-facing entry point. Every subcommand MUST be discoverable from
 `local-machine --help` (or the help of its parent subcommand).
+
+The command grammar is `local-machine <subcommand> <action> [parameters]`:
+
+- A **subcommand** names one capability (e.g. `export`) and is a group, not a single verb.
+- An **action** is a verb under that subcommand (e.g. `start`, `status`, `stop`). The
+  operations on a capability MUST be actions of its one subcommand, not sibling
+  subcommands (no `unexport`, `export-status`) and not mode-selecting flags
+  (no `export --stop`).
+- Actions that mean the same thing across subcommands MUST use the same verb
+  (e.g. every subcommand with a lifecycle uses `start` / `status` / `stop`).
+- Every feature spec MUST name its subcommand and list its actions.
 
 Rationale: one command makes the full toolset discoverable without remembering where each
 tool lives.
@@ -104,8 +124,9 @@ locally; no remote hosting is assumed by this constitution.
 - Amendments are made via `/speckit-constitution`, recorded with a Sync Impact Report, and
   versioned semantically: MAJOR for removed or redefined principles, MINOR for added
   principles or sections or materially expanded guidance, PATCH for clarifications.
-- Every review of a new subcommand MUST verify: it hangs off `local-machine` (I), contains no
+- Every review of a new subcommand MUST verify: it hangs off `local-machine` and follows the
+  `<subcommand> <action>` grammar (I), contains no
   machine-specific literals and reads config only from `--config-dir` (II), reuses existing parameter names (III), is Rust (IV), and
   targets Ubuntu only (V).
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
+**Version**: 1.2.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
