@@ -12,8 +12,9 @@
 
 ### User Story 1 - Edit home-directory files from Windows desktop tools (Priority: P1)
 
-The owner runs `local-machine export start` on the Ubuntu machine to share their home
-directory on the home network. On the Windows desktop they connect to the share (e.g. as a
+The owner runs `local-machine export setup` once on the Ubuntu machine, which installs
+and configures everything sharing needs, then runs `local-machine export start` to share
+their home directory on the home network. On the Windows desktop they connect to the share (e.g. as a
 mapped drive letter) and open a folder inside it as an Obsidian vault, or open files in any
 Windows editor. They read, edit, create, rename, and delete files, and the changes appear
 immediately on the Ubuntu machine.
@@ -21,22 +22,29 @@ immediately on the Ubuntu machine.
 **Why this priority**: This is the stated critical use case. Without read-write access that
 Windows editors can use natively, the feature has no value.
 
-**Independent Test**: Run `local-machine export start`, map the share from Windows, open a folder as
+**Independent Test**: On a fresh Ubuntu machine, run `local-machine export setup` then
+`local-machine export start`, map the share from Windows, open a folder as
 an Obsidian vault, create and edit a note, then confirm the file exists with the new content
 in the home directory on the Ubuntu machine.
 
 **Acceptance Scenarios**:
 
-1. **Given** the share is not set up, **When** the owner runs `local-machine export start`,
+1. **Given** a fresh Ubuntu machine with configuration present, **When** the owner runs
+   `local-machine export setup`, **Then** all software sharing needs is installed and
+   configured, the owner's share credentials are established, and the share is not yet
+   active.
+2. **Given** setup has not been run, **When** the owner runs `local-machine export start`,
+   **Then** it refuses, changes nothing, and tells the owner to run `export setup` first.
+3. **Given** setup has been run, **When** the owner runs `local-machine export start`,
    **Then** the home directory becomes reachable from the Windows desktop using only the
    connection facilities built into Windows (no extra client software).
-2. **Given** the share is active and mapped on Windows, **When** the owner edits and saves a
+4. **Given** the share is active and mapped on Windows, **When** the owner edits and saves a
    file in a Windows editor, **Then** the change is visible on the Ubuntu machine and the
    file is owned by the owner's Ubuntu account.
-3. **Given** a folder in the share is open as an Obsidian vault, **When** a file in it is
+5. **Given** a folder in the share is open as an Obsidian vault, **When** a file in it is
    changed on the Ubuntu side, **Then** Obsidian reflects the change without the vault being
    reopened.
-4. **Given** the share is active, **When** the Ubuntu machine reboots, **Then** the share is
+6. **Given** the share is active, **When** the Ubuntu machine reboots, **Then** the share is
    available again without the owner re-running `export start`.
 
 ---
@@ -86,10 +94,15 @@ then confirm Windows can no longer reach the share, including after a reboot.
 
 - `export start` is run when the share is already active: it MUST succeed without
   creating a duplicate share and MUST apply any changed configuration.
-- Required sharing software is not installed on the Ubuntu machine: `export start` installs
-  it or stops with a clear message naming what is missing.
-- A host firewall is blocking file sharing: `export start` opens access for the allowed
-  network only, or reports the blocking rule.
+- `export setup` is run again after a successful setup: it MUST succeed, re-applying
+  configuration without reinstalling or duplicating anything, and MUST NOT change the
+  active/not-active state of the share.
+- `export setup` fails partway (e.g. a package download fails): it reports the failing step,
+  and re-running it completes the setup.
+- A host firewall is active: `export setup` opens file-sharing access for the configured
+  network only, never for all networks.
+- Required software is removed after setup: `export start` and `export status` report that
+  setup is incomplete and point to `export setup`; neither installs anything.
 - The configuration file is missing or lacks a required value (e.g. the allowed network):
   the action stops with a message naming the missing value and the config file path; it
   MUST NOT guess machine-specific values.
@@ -109,8 +122,10 @@ then confirm Windows can no longer reach the share, including after a reboot.
 
 ### Functional Requirements
 
-- **FR-001**: The feature MUST be the `export` subcommand of `local-machine`, with three
+- **FR-001**: The feature MUST be the `export` subcommand of `local-machine`, with four
   actions (constitution Principle I):
+  - `local-machine export setup` — install and configure everything sharing needs
+    (User Story 1)
   - `local-machine export start` — start sharing (User Story 1)
   - `local-machine export status` — report share status (User Story 2)
   - `local-machine export stop` — stop sharing (User Story 3)
@@ -137,7 +152,7 @@ then confirm Windows can no longer reach the share, including after a reboot.
   parameter name (constitution Principle III).
 - **FR-010**: Once started, the share MUST stay available across reboots until explicitly
   stopped.
-- **FR-011**: Start and stop MUST be idempotent: running either twice has the same result as
+- **FR-011**: Setup, start, and stop MUST be idempotent: running any of them twice has the same result as
   running it once.
 - **FR-012**: Status MUST report whether the share is active, the shared directory, and the
   address to enter on Windows, and exit non-zero when the share is not active.
@@ -145,6 +160,14 @@ then confirm Windows can no longer reach the share, including after a reboot.
   remounting or reopening (needed for Obsidian's file watching).
 - **FR-014**: Operations requiring administrator privileges MUST say so up front and MUST NOT
   leave a half-configured share if they fail partway.
+- **FR-015**: `export setup` MUST install every piece of software the share needs from
+  Ubuntu's standard package sources, configure the sharing service and the host firewall
+  (allowing the configured network only), and establish the credentials Windows will use.
+  It MUST prompt the owner for the share password and MUST NOT write that password into
+  configuration files. Setup MUST NOT start sharing.
+- **FR-016**: Only `export setup` installs software. `export start`, `status`, and `stop`
+  MUST NOT install anything; when setup is incomplete they MUST say so and name
+  `export setup` as the fix.
 
 ### Key Entities
 
@@ -157,8 +180,8 @@ then confirm Windows can no longer reach the share, including after a reboot.
 
 ### Measurable Outcomes
 
-- **SC-001**: From a machine with no share configured (and config present), the owner can go
-  from running one command to having a folder open as an Obsidian vault on Windows in under
+- **SC-001**: From a fresh Ubuntu machine with configuration present, the owner can go from
+  running `export setup` and `export start` to having a folder open as an Obsidian vault on Windows in under
   5 minutes.
 - **SC-002**: 100% of file create/edit/rename/delete operations done in Obsidian on Windows
   are reflected correctly on the Ubuntu machine, with correct ownership.
@@ -182,7 +205,9 @@ then confirm Windows can no longer reach the share, including after a reboot.
   anonymous/guest shares by default, which is why credentials are required (FR-006).
 - The VM is reachable from the home LAN (bridged or equivalent networking). Configuring the
   hypervisor's networking is out of scope.
-- The owner can grant administrator privileges (sudo) when starting or stopping the share.
+- The owner can grant administrator privileges (sudo) for `export setup`, `start`, and
+  `stop`.
+- The Ubuntu machine can reach Ubuntu's package sources when `export setup` runs.
 - Connecting from Windows (mapping the drive, entering credentials) is done by the owner by
   hand; automating the Windows side is out of scope.
 - Sharing directories other than the home directory, and sharing to non-Windows clients, are
