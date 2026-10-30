@@ -12,7 +12,7 @@
 
 ### User Story 1 - Edit home-directory files from Windows desktop tools (Priority: P1)
 
-The owner runs one `local-machine` subcommand on the Ubuntu machine to share their home
+The owner runs `local-machine export start` on the Ubuntu machine to share their home
 directory on the home network. On the Windows desktop they connect to the share (e.g. as a
 mapped drive letter) and open a folder inside it as an Obsidian vault, or open files in any
 Windows editor. They read, edit, create, rename, and delete files, and the changes appear
@@ -21,13 +21,13 @@ immediately on the Ubuntu machine.
 **Why this priority**: This is the stated critical use case. Without read-write access that
 Windows editors can use natively, the feature has no value.
 
-**Independent Test**: Run the share subcommand, map the share from Windows, open a folder as
+**Independent Test**: Run `local-machine export start`, map the share from Windows, open a folder as
 an Obsidian vault, create and edit a note, then confirm the file exists with the new content
 in the home directory on the Ubuntu machine.
 
 **Acceptance Scenarios**:
 
-1. **Given** the share is not set up, **When** the owner runs the share subcommand,
+1. **Given** the share is not set up, **When** the owner runs `local-machine export start`,
    **Then** the home directory becomes reachable from the Windows desktop using only the
    connection facilities built into Windows (no extra client software).
 2. **Given** the share is active and mapped on Windows, **When** the owner edits and saves a
@@ -37,19 +37,19 @@ in the home directory on the Ubuntu machine.
    changed on the Ubuntu side, **Then** Obsidian reflects the change without the vault being
    reopened.
 4. **Given** the share is active, **When** the Ubuntu machine reboots, **Then** the share is
-   available again without the owner re-running the subcommand.
+   available again without the owner re-running `export start`.
 
 ---
 
 ### User Story 2 - Check share status (Priority: P2)
 
-The owner asks `local-machine` whether the share is active, and gets back the address
+The owner runs `local-machine export status` to see whether the share is active, and gets back the address
 Windows should connect to, which directory is shared, and whether it is reachable.
 
 **Why this priority**: Makes it easy to find the connection address and to diagnose why
 Windows cannot connect, but the share works without it.
 
-**Independent Test**: With the share active, run the status subcommand and use the address
+**Independent Test**: With the share active, run `local-machine export status` and use the address
 it prints to connect from Windows successfully; with the share inactive, status reports
 that clearly.
 
@@ -64,13 +64,13 @@ that clearly.
 
 ### User Story 3 - Stop sharing (Priority: P3)
 
-The owner runs a subcommand to stop sharing the home directory. Afterwards the share is no
+The owner runs `local-machine export stop` to stop sharing the home directory. Afterwards the share is no
 longer reachable from the network and does not come back on reboot.
 
 **Why this priority**: Needed for a clean lifecycle, but the owner's primary goal is
 enabling the share.
 
-**Independent Test**: With the share active and mapped on Windows, run the stop subcommand,
+**Independent Test**: With the share active and mapped on Windows, run `local-machine export stop`,
 then confirm Windows can no longer reach the share, including after a reboot.
 
 **Acceptance Scenarios**:
@@ -84,14 +84,14 @@ then confirm Windows can no longer reach the share, including after a reboot.
 
 ### Edge Cases
 
-- The share subcommand is run when the share is already active: it MUST succeed without
+- `export start` is run when the share is already active: it MUST succeed without
   creating a duplicate share and MUST apply any changed configuration.
-- Required sharing software is not installed on the Ubuntu machine: the subcommand installs
+- Required sharing software is not installed on the Ubuntu machine: `export start` installs
   it or stops with a clear message naming what is missing.
-- A host firewall is blocking file sharing: the subcommand opens access for the allowed
+- A host firewall is blocking file sharing: `export start` opens access for the allowed
   network only, or reports the blocking rule.
 - The configuration file is missing or lacks a required value (e.g. the allowed network):
-  the subcommand stops with a message naming the missing value and the config file path; it
+  the action stops with a message naming the missing value and the config file path; it
   MUST NOT guess machine-specific values.
 - The VM's network is not reachable from the home LAN (e.g. NAT-only networking): status
   reports that the share is active but not reachable from the configured network.
@@ -109,8 +109,11 @@ then confirm Windows can no longer reach the share, including after a reboot.
 
 ### Functional Requirements
 
-- **FR-001**: The feature MUST be a subcommand of `local-machine` (constitution Principle I),
-  with actions to start sharing, report status, and stop sharing.
+- **FR-001**: The feature MUST be the `export` subcommand of `local-machine`, with three
+  actions (constitution Principle I):
+  - `local-machine export start` — start sharing (User Story 1)
+  - `local-machine export status` — report share status (User Story 2)
+  - `local-machine export stop` — stop sharing (User Story 3)
 - **FR-002**: Sharing MUST use a network file-sharing protocol that Windows supports out of
   the box, so the Windows desktop needs no additional client software. (CIFS/SMB and NFS
   are both acceptable to the owner.)

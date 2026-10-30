@@ -31,6 +31,7 @@
 
 ## Notes
 
+- Resolved 2026-10-30: FR-001 — names subcommand `export` with actions `start`/`status`/`stop` (constitution v1.2.0 grammar).
 - Resolved 2026-10-30: FR-005 — share home minus a configurable exclusion list, default
   `.ssh` and `.gnupg` (owner chose option C). Added SC-006 and an edge case to match.
 - References to `local-machine`, YAML, and `--config-dir` are constitution mandates, not
