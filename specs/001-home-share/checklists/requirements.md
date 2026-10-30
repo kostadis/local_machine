@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Home Directory Network Share
+# Specification Quality Checklist: `local-machine export`
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-10-30
@@ -31,11 +31,11 @@
 
 ## Notes
 
-- Resolved 2026-10-30: FR-001 — names subcommand `export` with actions `start`/`status`/`stop` (constitution v1.2.0 grammar).
-- Resolved 2026-10-30: added `export setup` action (owner chose separate action); only setup installs software (FR-015, FR-016).
-- Resolved 2026-10-30: FR-005 — share home minus a configurable exclusion list, default
-  `.ssh` and `.gnupg` (owner chose option C). Added SC-006 and an edge case to match.
+- Regenerated 2026-10-30: spec is scoped to the `export` subcommand as a whole. Each action
+  (`setup`, `start`, `status`, `stop`) is specified by what it guarantees, not how it does
+  it; firewall, package sources, password prompting, and protocol choice moved to planning.
+- 2026-10-30: added Unix VMs as a second client kind (User Story 2, FR-010–FR-013, FR-017, SC-007); stories renumbered.
+- Owner decisions carried forward: separate `setup` action that alone installs software
+  (FR-004, FR-005); exclusion list defaulting to `.ssh` and `.gnupg` (FR-014).
 - References to `local-machine`, YAML, and `--config-dir` are constitution mandates, not
-  implementation choices, so they do not fail the "no implementation details" item.
-- Protocol is deliberately left open (FR-002: built into Windows); choosing between SMB and
-  NFS belongs to `/speckit-plan`.
+  implementation choices.
