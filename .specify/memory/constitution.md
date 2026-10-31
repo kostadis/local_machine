@@ -1,5 +1,16 @@
 <!--
 Sync Impact Report
+- Version change: 1.2.1 → 1.3.0 (MINOR: materially expanded Principle II)
+- Modified principles:
+  - II. Configuration, Not Hardcoding: per-subcommand config files by default; mandatory
+    config-sharing review in each plan's research; shared values refactored into a shared
+    file with every user updated in the same feature
+- Governance: subcommand review now checks the config-sharing review
+- Added/removed sections: none
+- CLAUDE.md updated in the same change (Governance sync rule)
+- Deferred: shared config file name/schema, to be fixed by the first feature that needs it
+
+Previous report (1.2.1):
 - Version change: 1.2.0 → 1.2.1 (PATCH: Principle I lists `setup` as a shared verb)
 - Modified principles: I. Single Entry Point (shared-verb list; no rule change)
 - Added/removed sections: none
@@ -78,9 +89,25 @@ Configuration MUST be stored in a configuration directory whose default is
 that reads configuration MUST accept the same `--config-dir` parameter (Principle III) to
 override the default, and MUST NOT read configuration from any other location.
 
+Configuration is **isolated by default, shared by refactoring**:
+
+- Each subcommand reads its own file, `<config-dir>/<subcommand>.yaml` (e.g. `export.yaml`).
+  A broken or missing file affects only its own subcommand.
+- During research for every new feature (`/speckit-plan` Phase 0), the plan MUST compare the
+  new subcommand's config values with every existing subcommand's and record the result:
+  values with the same meaning (e.g. the home network, the owner account) are sharing
+  opportunities.
+- When a sharing opportunity exists, the shared value MUST move to a shared file in the same
+  config directory, and every subcommand that uses it MUST be refactored to read it from
+  there, in the same feature. Each value has exactly one home; a value MUST NOT be
+  duplicated across subcommand files.
+- The shared file's name and schema are fixed by the first feature that needs one, and
+  recorded in this principle.
+
 Rationale: the tools describe *how* to manage a machine; the config describes *which*
 machine. Keeping them apart lets the same binary manage a rebuilt or replacement VM by
-editing YAML alone.
+editing YAML alone. Isolation keeps subcommands independent; sharing is added only when
+research shows a value really is common, so one fact is set in one place.
 
 ### III. Shared Parameter Vocabulary
 
@@ -134,7 +161,8 @@ locally; no remote hosting is assumed by this constitution.
   principles or sections or materially expanded guidance, PATCH for clarifications.
 - Every review of a new subcommand MUST verify: it hangs off `local-machine` and follows the
   `<subcommand> <action>` grammar (I), contains no
-  machine-specific literals and reads config only from `--config-dir` (II), reuses existing parameter names (III), is Rust (IV), and
+  machine-specific literals, reads config only from `--config-dir`, and its plan records the
+  config-sharing review (II), reuses existing parameter names (III), is Rust (IV), and
   targets Ubuntu only (V).
 
-**Version**: 1.2.1 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
+**Version**: 1.3.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30

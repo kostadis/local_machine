@@ -6,6 +6,8 @@ The configuration files will use yaml.
 
 Configuration is stored in ~/.config/local-machine by default. The location is a parameter (`--config-dir`), shared by every sub-command that reads configuration.
 
+Config is isolated by default: each sub-command has its own file, `<config-dir>/<subcommand>.yaml`. When planning a new sub-command, research compares its config with the existing sub-commands'. Values that would add value by being shared (same meaning, e.g. the home network) move to a shared file, and every sub-command using them is refactored to read it from there.
+
 The tools will assume an ubuntu linux system. 
 
 There will be a local repo
