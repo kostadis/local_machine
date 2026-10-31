@@ -1,0 +1,144 @@
+//! An in-memory [`System`] for tests: records commands, serves scripted outputs.
+
+use std::cell::RefCell;
+use std::collections::{HashMap, VecDeque};
+use std::path::{Path, PathBuf};
+
+use anyhow::{Result, bail};
+
+use super::{Cmd, Output, System};
+
+#[derive(Default)]
+pub struct FakeSystem {
+    /// Command line → output. Unlisted commands succeed with empty output.
+    pub responses: RefCell<HashMap<String, Output>>,
+    pub calls: RefCell<Vec<String>>,
+    pub files: RefCell<HashMap<PathBuf, String>>,
+    pub dirs: RefCell<HashMap<PathBuf, u32>>,
+    pub passwords: RefCell<VecDeque<String>>,
+    pub user: Option<String>,
+}
+
+impl FakeSystem {
+    /// Starts with no cached sudo credentials, so the privilege notice prompts.
+    pub fn new(user: &str) -> Self {
+        let sys = FakeSystem {
+            user: Some(user.to_string()),
+            ..Default::default()
+        };
+        sys.respond("sudo -n -v", Output::fail(1, "a password is required"));
+        sys
+    }
+
+    pub fn respond(&self, line: &str, out: Output) {
+        self.responses.borrow_mut().insert(line.to_string(), out);
+    }
+
+    pub fn set_file(&self, path: &str, content: &str) {
+        self.files
+            .borrow_mut()
+            .insert(PathBuf::from(path), content.to_string());
+    }
+
+    pub fn file(&self, path: &str) -> Option<String> {
+        self.files.borrow().get(Path::new(path)).cloned()
+    }
+
+    pub fn set_dir(&self, path: &str, uid: u32) {
+        self.dirs.borrow_mut().insert(PathBuf::from(path), uid);
+    }
+
+    pub fn push_password(&self, pw: &str) {
+        self.passwords.borrow_mut().push_back(pw.to_string());
+    }
+
+    pub fn calls(&self) -> Vec<String> {
+        self.calls.borrow().clone()
+    }
+
+    pub fn clear_calls(&self) {
+        self.calls.borrow_mut().clear();
+    }
+
+    /// Whether the privilege notice prompted (`sudo -v`). Panics if any command ran with
+    /// full root before it: the rule every privileged action must keep.
+    pub fn prompted(&self) -> bool {
+        let calls = self.calls();
+        let notice = calls.iter().position(|c| is_notice(c));
+        let first_root = calls
+            .iter()
+            .position(|c| c.starts_with("sudo ") && !c.starts_with("sudo -n ") && !is_notice(c));
+        if let Some(r) = first_root {
+            assert!(
+                notice.is_some_and(|n| n < r),
+                "`{}` ran with root before the privilege notice; calls: {calls:#?}",
+                calls[r]
+            );
+        }
+        notice.is_some()
+    }
+
+    /// Calls that ran with root (`sudo ...`), excluding the `sudo -v` prompt.
+    pub fn root_calls(&self) -> Vec<String> {
+        self.calls()
+            .into_iter()
+            .filter(|c| c.starts_with("sudo ") && !is_notice(c))
+            .collect()
+    }
+}
+
+/// The privilege notice's credential check: `sudo -n -v` (cached?), then `sudo -v`, with or
+/// without a custom prompt.
+fn is_notice(call: &str) -> bool {
+    call == "sudo -n -v" || call == "sudo -v" || call.starts_with("sudo -v ")
+}
+
+impl System for FakeSystem {
+    fn run(&self, cmd: &Cmd) -> Result<Output> {
+        let line = cmd.line();
+        self.calls.borrow_mut().push(line.clone());
+        Ok(self
+            .responses
+            .borrow()
+            .get(&line)
+            .cloned()
+            .unwrap_or_default())
+    }
+
+    fn read_file(&self, path: &Path) -> Option<String> {
+        self.files.borrow().get(path).cloned()
+    }
+
+    fn install_file(&self, path: &Path, content: &str) -> Result<()> {
+        self.calls
+            .borrow_mut()
+            .push(format!("install {}", path.display()));
+        self.files
+            .borrow_mut()
+            .insert(path.to_path_buf(), content.to_string());
+        Ok(())
+    }
+
+    fn remove_file(&self, path: &Path) -> Result<()> {
+        self.calls
+            .borrow_mut()
+            .push(format!("remove {}", path.display()));
+        self.files.borrow_mut().remove(path);
+        Ok(())
+    }
+
+    fn dir_owner(&self, path: &Path) -> Option<u32> {
+        self.dirs.borrow().get(path).copied()
+    }
+
+    fn current_user(&self) -> Option<String> {
+        self.user.clone()
+    }
+
+    fn prompt_password(&self, _prompt: &str) -> Result<String> {
+        match self.passwords.borrow_mut().pop_front() {
+            Some(pw) => Ok(pw),
+            None => bail!("no password scripted"),
+        }
+    }
+}

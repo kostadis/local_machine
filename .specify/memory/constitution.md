@@ -1,5 +1,19 @@
 <!--
 Sync Impact Report
+- Version change: 1.3.0 → 1.4.0 (MINOR: new principle added; Source Control expanded)
+- Added principles:
+  - VI. Privileged Actions: Look, Then Ask — every action that needs root goes through the
+    shared runner `system::action::run`; checks only look; the notice names only steps that
+    need root; a refusing gate or nothing-to-do never prompts; status-type actions never
+    prompt; tests assert the order with `FakeSystem::prompted()`
+- Modified principles: none
+- Source Control: `main` changes only by merging a branch; no direct commits to `main`
+- Governance: "Principles I–V" → "I–VI"; subcommand review now checks privileged actions (VI)
+- Added/removed sections: none
+- CLAUDE.md updated in the same change (Governance sync rule)
+- Deferred: none
+
+Previous report (1.3.0):
 - Version change: 1.2.1 → 1.3.0 (MINOR: materially expanded Principle II)
 - Modified principles:
   - II. Configuration, Not Hardcoding: per-subcommand config files by default; mandatory
@@ -137,6 +151,31 @@ add complexity to the code.
 Rationale: the tool manages one known kind of machine; designing for others is cost without
 benefit.
 
+### VI. Privileged Actions: Look, Then Ask
+
+Every action, in any subcommand, that needs root MUST run through the shared
+privileged-action runner (`src/system/action.rs`, `action::run`). An action is an optional
+gate (what must already be true) and a list of steps (what to make true). Actions MUST NOT
+call `sudo_preflight` or run `sudo` commands outside the runner's steps and hooks.
+
+- **Checks only look.** Gate and step checks MAY only read and use `sudo -n`; they MUST NOT
+  prompt or change the machine. The runner enforces this by giving checks a `NoPrompt`
+  system.
+- **Ask only when needed.** The privilege notice MUST list only the steps that need root to
+  change something or to find out, and MUST precede every root command.
+- **Refuse before asking.** When the gate refuses (e.g. not set up), the action MUST exit
+  with the gate's code before any notice or prompt.
+- **Nothing to do, no prompt.** When every step is already in place, the action MUST print
+  its `ok:` lines without a notice or prompt.
+- **Reports never prompt.** Read-only actions such as `status` MUST NOT prompt; they report
+  what they cannot check without root instead.
+- **Tested.** Tests of every privileged action MUST assert the privilege order with
+  `FakeSystem::prompted()`.
+
+Rationale: a sudo prompt is an interruption and a trust decision. Asking only when there is
+root work to do, and saying exactly what that work is, keeps the prompt meaningful; one
+shared runner keeps the rule the same for every subcommand instead of re-solved in each.
+
 ## Scope & Machine Boundary
 
 This project contains scripts and tools for managing this particular virtual machine (see
@@ -149,20 +188,27 @@ by assumptions in code.
 The project's source lives in a local git repository. Changes are made and committed
 locally; no remote hosting is assumed by this constitution.
 
+`main` changes only by merging a branch; nothing, including a constitution amendment, is
+committed directly to `main`. Each change is committed on a branch (a feature branch, or a
+short branch of its own) together with anything it depends on, so `main` always holds a
+consistent set of rules and code.
+
 ## Governance
 
 - This constitution is derived from the project's `CLAUDE.md`. The two MUST stay
   consistent: an amendment to either requires updating the other in the same change.
 - This constitution supersedes conflicting practice. Specs, plans, and tasks produced by
-  Spec Kit MUST be checked against Principles I–V; any deviation MUST be justified
+  Spec Kit MUST be checked against Principles I–VI; any deviation MUST be justified
   explicitly in the plan's complexity tracking.
-- Amendments are made via `/speckit-constitution`, recorded with a Sync Impact Report, and
-  versioned semantically: MAJOR for removed or redefined principles, MINOR for added
-  principles or sections or materially expanded guidance, PATCH for clarifications.
+- Amendments are made via `/speckit-constitution` on a branch (see Source Control),
+  recorded with a Sync Impact Report, and versioned semantically: MAJOR for removed or
+  redefined principles, MINOR for added principles or sections or materially expanded
+  guidance, PATCH for clarifications.
 - Every review of a new subcommand MUST verify: it hangs off `local-machine` and follows the
   `<subcommand> <action>` grammar (I), contains no
   machine-specific literals, reads config only from `--config-dir`, and its plan records the
-  config-sharing review (II), reuses existing parameter names (III), is Rust (IV), and
-  targets Ubuntu only (V).
+  config-sharing review (II), reuses existing parameter names (III), is Rust (IV),
+  targets Ubuntu only (V), and runs every action that needs root through `action::run`,
+  with tests asserting the privilege order (VI).
 
-**Version**: 1.3.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-30
+**Version**: 1.4.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-31
