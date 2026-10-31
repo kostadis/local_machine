@@ -152,7 +152,10 @@ run `export stop`, then confirm neither can reach it, including after a reboot.
   files still belong to the owner on the Ubuntu machine, and access still requires the
   owner's credentials.
 - A symbolic link in the home directory points outside it: it is not followed to expose
-  anything outside the shared directory or on the exclusion list.
+  anything outside the shared directory.
+- A symbolic link inside the home directory points at an excluded item (e.g.
+  `keys -> .ssh`): `export status` warns about it. Blocking it is not required — the
+  exclusion list is a convenience on a trusted network, not a security boundary.
 - The same file is written from two clients, or from a client and Ubuntu, at once: last write wins; there are
   no locking guarantees beyond what the sharing method provides.
 
@@ -201,7 +204,9 @@ run `export stop`, then confirm neither can reach it, including after a reboot.
 - **FR-013**: Changes made on the Ubuntu machine or any client MUST be visible on all others
   without reconnecting or reopening (needed for Obsidian's file watching).
 - **FR-014**: The share MUST cover the owner's home directory minus a configurable exclusion
-  list (default `.ssh` and `.gnupg`). Excluded paths MUST be neither visible nor reachable.
+  list of names (default `.ssh` and `.gnupg`). An excluded name is hidden wherever it occurs
+  in the shared directory, at any depth; entries are names, not paths. Excluded items MUST
+  be neither visible nor reachable by that name.
   Everything else, including other hidden files and folders such as `.obsidian`, MUST be
   shared.
 - **FR-015**: Access MUST require the owner's credentials; anonymous access MUST NOT be
@@ -231,8 +236,8 @@ run `export stop`, then confirm neither can reach it, including after a reboot.
   credentials, fail 100% of the time.
 - **SC-005**: After 100% of reboots, an available share is available again with no manual
   action, and a stopped share stays unavailable.
-- **SC-006**: Excluded paths (by default `.ssh` and `.gnupg`) cannot be listed, read, or
-  written from any client, 100% of the time.
+- **SC-006**: Excluded names (by default `.ssh` and `.gnupg`) cannot be listed, read, or
+  written by that name from any client, 100% of the time.
 - **SC-007**: From a Unix VM, 100% of create/edit/rename/delete operations are reflected
   correctly on the Ubuntu machine with the owner as file owner, and file permissions are
   unchanged by edits.
