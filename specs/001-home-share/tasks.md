@@ -130,6 +130,34 @@ V9, V10, V13, V16, V17, V18.
 
 ---
 
+## Real-Machine Validation Progress (2026-10-31)
+
+Quickstart checks run by the owner on the real machine. T019, T022, T026, T029 and T032 stay
+open until every check they list has passed.
+
+| Check | Result |
+|-------|--------|
+| V1 status before setup | pass (exit 4) |
+| V2 start before setup | pass (exit 4, no prompt, nothing changed) |
+| V3 setup twice | pass (second run only `ok:`, no share-password prompt) |
+| V4 start, status | pass (available, exit 0; smbd enabled+active) |
+| V5 Windows + Obsidian | pass |
+| V7 excluded names (Windows) | pass |
+| V9 wrong password, guest | pass; outside-network half not tested (no host outside 192.168.1.0/24) |
+| V13 no password in config | pass |
+| V15 ~500 KB note save | pass |
+| V17 Windows-illegal file name | pass (mangled name visible via `dir`; Ubuntu file unchanged) |
+| V18 globals applied | pass, with Ubuntu's `[printers]`/`[print$]` shares accepted (research R5) |
+
+**Not yet run**: V6 and V7 (Unix VM), V8, V10 (reboot), V11, V12, V14, V16, then the full
+V1–V18 re-run (T032).
+
+**Open question**: whether to add `smb ports = 445` so smbd stops listening on port 139
+(still covered by `hosts allow` and the password). Owner has not decided.
+
+**Future idea (owner, 2026-10-31)**: allow access over Tailscale — `allowed_network` would
+become a list; its own spec when wanted.
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
