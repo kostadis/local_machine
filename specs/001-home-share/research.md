@@ -62,10 +62,16 @@ Environment observed on the target machine (2026-10-30): Ubuntu 26.04 LTS, Rust/
   the port at all.
 - **Also**: `disable netbios = yes` (and `nmbd` stays disabled) — Windows and Linux both
   connect by address over TCP 445; NetBIOS name service is unnecessary attack surface.
-- **Printing off**: the packaged `smb.conf` defines `[printers]` and `[print$]`. Globals set
-  `load printers = no`, `printing = bsd`, `printcap name = /dev/null`,
-  `disable spoolss = yes`, so no printer shares appear when `smbd` runs; `[print$]` remains
-  but is subject to the same `hosts allow` and owner-only authentication.
+- **Printing off**: globals set `load printers = no`, `printing = bsd`,
+  `printcap name = /dev/null`, `disable spoolss = yes`, so no printers are loaded or served.
+  **Correction (V18, 2026-10-31)**: the packaged `smb.conf` defines `[printers]` and
+  `[print$]` *before* our include, and Samba fixes a share's settings when it reads its
+  section, so these globals do not remove them: both shares remain (`printing = cups`).
+  **Owner decision (2026-10-31): accepted.** Both need the owner's Samba password
+  (`guest ok = no`) and are covered by the global `hosts allow`/`hosts deny`, which
+  smb.conf(5) applies to every share. `[print$]` is a read-only view of
+  `/var/lib/samba/printers`; `[printers]` accepts print jobs into `/var/tmp` that never
+  print (no printers). Removing them would mean editing more of Ubuntu's `smb.conf`.
 - **Network changes (owner decision 2026-10-30)**: changing `allowed_network` requires
   re-running `export setup`, which rewrites the globals and replaces the firewall rule
   (removing any `Samba` rule for a different network). `start` and `status` detect the

@@ -134,6 +134,9 @@ module directory, mirroring the command tree.
   tests.
 - `smb3 unix extensions = yes` is a share parameter (research R2), rendered in the share
   file rather than the globals.
+- V18 showed Ubuntu's `[printers]` and `[print$]` shares survive the printing-off globals
+  (they are defined before our include). Owner accepted them (research R5): password-only,
+  inside `hosts allow`, and unable to print.
 
 ## Complexity Tracking
 

@@ -64,7 +64,7 @@ Each component has `check()` and `apply()`; setup applies only those whose check
 
 | File | Written by | Contents |
 |------|-----------|----------|
-| `/etc/samba/local-machine-export.conf` | `setup` | Starts with `[global]`; global hardening (R2, R4, R5, R7), printing off, then `include` of the share file |
+| `/etc/samba/local-machine-export.conf` | `setup` | Starts with `[global]`; global hardening (R2, R4, R5, R7), printers off (Ubuntu's `[printers]`/`[print$]` stanzas remain, R5), then `include` of the share file |
 | `/etc/samba/local-machine-export-share.conf` | `start` (write), `stop` (empty) | The single `[<share_name>]` stanza: `path`, `valid users`, `force user`, `read only = no`, `veto files`, `delete veto files = no` |
 
 Both files start with a header comment: `# Managed by local-machine export — do not edit`.

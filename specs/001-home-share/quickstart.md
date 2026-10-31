@@ -31,7 +31,7 @@ and exit codes: [contracts/cli.md](contracts/cli.md). Config: [contracts/export-
 | V15 | **[Windows]** Open and save a ~500 KB note | Under 1 second | SC-003 |
 | V16 | With the share available, change `allowed_network` in `export.yaml`; run `export start`; `export status`; then `export setup`, `export start` | `start` exits 4 and `status` warns "configuration changed — run 'local-machine export setup'"; after setup + start the share is available, old firewall rule gone (`sudo ufw status`) | Edge case (config change), FR-016 |
 | V17 | On Ubuntu `touch ~/'a:b?.txt'`; **[Windows]** browse that folder; on Ubuntu `ls -l ~/'a:b?.txt'` | Windows shows a mangled name or hides it; the Ubuntu file is unchanged | Edge case (file names) |
-| V18 | `sudo testparm -s 2>/dev/null \| sed -n '/^\[global\]/,/^\[/p'` | Shows `map to guest = Never`, `server min protocol = SMB3`, `hosts allow`, `restrict anonymous = 2` in `[global]`, and no `[printers]` share | FR-015, FR-016 (globals applied) |
+| V18 | `sudo testparm -s 2>/dev/null \| sed -n '/^\[global\]/,/^\[/p'`; then `testparm -s --parameter-name="map to guest"` | `[global]` shows `server min protocol = SMB3`, `restrict anonymous = 2`, `hosts allow = <allowed_network> 127.0.0.1`, `hosts deny = ALL`; `map to guest` prints `Never` (a default, so the first command hides it). Ubuntu's `[printers]` and `[print$]` shares remain (accepted, research R5) | FR-015, FR-016 (globals applied) |
 
 ## Automated checks
 
