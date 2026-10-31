@@ -15,6 +15,11 @@ use super::state::{self, ShareState};
 use super::{connect, samba};
 
 pub fn run(cfg: &ExportConfig, sys: &dyn System) -> Result<u8> {
+    // Refuse before prompting when the unprivileged checks already show setup is missing.
+    let report = state::detect(cfg, sys);
+    if report.state == ShareState::NotSetUp {
+        return Err(ExitError::new(ExitError::NOT_SET_UP, report.not_set_up_message()).into());
+    }
     sudo_preflight(
         sys,
         &[

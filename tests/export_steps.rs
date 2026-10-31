@@ -163,6 +163,7 @@ fn setup_rejects_mismatched_passwords_and_rolls_back() {
 fn start_before_setup_refuses_and_changes_nothing() {
     let f = Fixture::new();
     assert_eq!(f.run(ExportAction::Start), Err(ExitError::NOT_SET_UP));
+    assert!(!f.sys.calls().contains(&"sudo -v".to_string()), "no prompt");
     assert!(f.sys.root_calls().iter().all(|c| c.starts_with("sudo -n ")));
     assert!(!f.sys.calls().iter().any(|c| c.starts_with("install ")));
 }
@@ -174,7 +175,10 @@ fn start_makes_the_share_available_once() {
     assert_eq!(f.run(ExportAction::Start), Ok(0));
     let calls = f.sys.calls();
     assert_eq!(
-        calls.iter().find(|c| c.starts_with("sudo ")).unwrap(),
+        calls
+            .iter()
+            .find(|c| c.starts_with("sudo ") && !c.starts_with("sudo -n "))
+            .unwrap(),
         "sudo -v"
     );
     position(&calls, "sudo systemctl enable --now smbd");
@@ -325,6 +329,7 @@ fn stop_then_stop_again() {
 fn stop_before_setup_refuses_without_installing() {
     let f = Fixture::new();
     assert_eq!(f.run(ExportAction::Stop), Err(ExitError::NOT_SET_UP));
+    assert!(!f.sys.calls().contains(&"sudo -v".to_string()), "no prompt");
     assert!(!f.sys.calls().iter().any(|c| c.contains("apt-get")));
 }
 
