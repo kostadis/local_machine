@@ -20,11 +20,14 @@ pub struct FakeSystem {
 }
 
 impl FakeSystem {
+    /// Starts with no cached sudo credentials, so the privilege notice prompts.
     pub fn new(user: &str) -> Self {
-        FakeSystem {
+        let sys = FakeSystem {
             user: Some(user.to_string()),
             ..Default::default()
-        }
+        };
+        sys.respond("sudo -n -v", Output::fail(1, "a password is required"));
+        sys
     }
 
     pub fn respond(&self, line: &str, out: Output) {
@@ -84,9 +87,10 @@ impl FakeSystem {
     }
 }
 
-/// The privilege notice's credential check: `sudo -v`, with or without a custom prompt.
+/// The privilege notice's credential check: `sudo -n -v` (cached?), then `sudo -v`, with or
+/// without a custom prompt.
 fn is_notice(call: &str) -> bool {
-    call == "sudo -v" || call.starts_with("sudo -v ")
+    call == "sudo -n -v" || call == "sudo -v" || call.starts_with("sudo -v ")
 }
 
 impl System for FakeSystem {

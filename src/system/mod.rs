@@ -154,10 +154,15 @@ pub fn sudo_preflight(sys: &dyn System, steps: &[String]) -> Result<()> {
     for s in steps {
         println!("  {s}");
     }
-    // Our own prompt: sudo-rs's default `[sudo: authenticate] Password:` is easy to miss.
-    // `%` is sudo's prompt escape, so it is doubled in the user name.
-    let user = sys.current_user().unwrap_or_default().replace('%', "%%");
-    let prompt = format!("\n>>> sudo password for {user} (needed for the steps above): ");
+    // Credentials still cached: nothing to ask, so no password line.
+    if sys.run(&Cmd::new("sudo").args(["-n", "-v"]))?.success() {
+        return Ok(());
+    }
+    // sudo-rs shows a prompt as `[sudo: <prompt>] Password:`, easy to miss under the notice,
+    // so say it on a line of our own first. `%` is sudo's prompt escape.
+    let user = sys.current_user().unwrap_or_default();
+    println!("\n>>> enter your sudo password for {user} (needed for the steps above)");
+    let prompt = format!("password for {}", user.replace('%', "%%"));
     let out = sys.run(&Cmd::new("sudo").args(["-v", "-p", &prompt]).interactive())?;
     if !out.success() {
         bail!("administrator privileges refused");
