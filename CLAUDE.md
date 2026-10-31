@@ -12,6 +12,8 @@ The tools will assume an ubuntu linux system.
 
 There will be a local repo
 
+Nothing is committed directly to `main`; it changes only by merging a branch. Every change, including a constitution amendment, is committed on a branch with whatever it depends on.
+
 To make discovery of tools easy, the system will be structured so that there is a top-level command called "local-machine" that all sub commands will derive from. 
 
 Commands take the form `local-machine <subcommand> <action>`, e.g. `local-machine export start`. A subcommand is a capability; its operations are actions (verbs) under it, not sibling subcommands or flags. Actions with the same meaning use the same verb across subcommands (e.g. setup / start / status / stop). `setup` means install and configure everything the subcommand needs.
@@ -20,3 +22,5 @@ To make life simple, any sub-command that needs a same parameter will use the sa
 
 The code of this tool will be rust. 
  
+
+Any action that needs sudo goes through the shared privileged-action runner (`src/system/action.rs`): it checks first without prompting, asks for sudo only when there is root work to do (naming exactly that work), refuses before prompting when a precondition fails, and never prompts when nothing needs to change. Read-only actions like `status` never prompt.
