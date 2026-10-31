@@ -304,7 +304,8 @@ mod tests {
         let sys = FakeSystem::new("me");
         let steps: Vec<Box<dyn Step>> = vec![Fixed::new(|| Check::NeedsChange("x".into()), true)];
         assert!(run(&sys, action(steps)).unwrap());
-        assert_eq!(sys.calls(), ["sudo -v", "sudo true"]);
+        assert!(sys.prompted());
+        assert_eq!(sys.root_calls(), ["sudo true"]);
     }
 
     #[test]

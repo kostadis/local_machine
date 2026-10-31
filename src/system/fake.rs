@@ -61,10 +61,10 @@ impl FakeSystem {
     /// full root before it: the rule every privileged action must keep.
     pub fn prompted(&self) -> bool {
         let calls = self.calls();
-        let notice = calls.iter().position(|c| c == "sudo -v");
+        let notice = calls.iter().position(|c| is_notice(c));
         let first_root = calls
             .iter()
-            .position(|c| c.starts_with("sudo ") && !c.starts_with("sudo -n ") && c != "sudo -v");
+            .position(|c| c.starts_with("sudo ") && !c.starts_with("sudo -n ") && !is_notice(c));
         if let Some(r) = first_root {
             assert!(
                 notice.is_some_and(|n| n < r),
@@ -75,13 +75,18 @@ impl FakeSystem {
         notice.is_some()
     }
 
-    /// Calls that ran with root (`sudo ...`), excluding `sudo -v`.
+    /// Calls that ran with root (`sudo ...`), excluding the `sudo -v` prompt.
     pub fn root_calls(&self) -> Vec<String> {
         self.calls()
             .into_iter()
-            .filter(|c| c.starts_with("sudo ") && c != "sudo -v")
+            .filter(|c| c.starts_with("sudo ") && !is_notice(c))
             .collect()
     }
+}
+
+/// The privilege notice's credential check: `sudo -v`, with or without a custom prompt.
+fn is_notice(call: &str) -> bool {
+    call == "sudo -v" || call.starts_with("sudo -v ")
 }
 
 impl System for FakeSystem {
