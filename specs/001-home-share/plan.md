@@ -81,14 +81,14 @@ src/
 ├── config.rs                 # shared: resolve config dir, load <name>.yaml (any subcommand)
 ├── system/
 │   ├── mod.rs                # System trait + RealSystem, Cmd, sudo preflight
+│   ├── action.rs             # shared privileged-action runner: Gate, Step, look-then-act, NoPrompt
 │   ├── fake.rs               # FakeSystem for tests
-│   ├── files.rs              # replace with in-memory backup/restore
-│   └── steps.rs              # Step trait: check() -> Done|NeedsChange, apply(); runner prints ok/changed
+│   └── files.rs              # replace with in-memory backup/restore
 └── export/
     ├── mod.rs                # action dispatch
     ├── config.rs             # ExportConfig + validation
     ├── samba.rs              # pure rendering of global + share config text
-    ├── state.rs              # ShareState detection
+    ├── state.rs              # ShareState detection; SetUp gate for start/stop
     ├── setup.rs              # SetupComponent steps
     ├── start.rs
     ├── status.rs             # report, reachability, drift, symlink warnings
@@ -121,7 +121,17 @@ module directory, mirroring the command tree.
   replaces the planned `CommandRunner`, so file effects are faked in tests too.
 - Backups for rollback are kept in memory for the duration of an action instead of
   `<path>.local-machine.bak` files; managed files are small and rollback happens in-process.
-- Each action calls `sudo_preflight` itself before checking state; `run_steps` does not.
+- Privileged actions run through `system::action::run`, shared by every subcommand. It
+  checks the gate and every step first through `NoPrompt` (reads and `sudo -n` only; anything
+  that could prompt or change the machine is an error), then:
+  - gate refuses (e.g. not set up) → exit with its code, no notice, no prompt;
+  - everything already in place → `ok:` lines, no notice, no prompt;
+  - otherwise → a privilege notice naming only the steps that need root to change or to
+    check, `sudo -v`, the gate re-checked as root, then check→apply→rollback per step.
+  Each `Step` supplies its own notice line (`None` when it needs no root). This supersedes
+  the "preflight first, before any check" order in T008/T016/T027 (FR-009 still holds:
+  the notice precedes every root command). `FakeSystem::prompted()` asserts that order in
+  tests.
 - `smb3 unix extensions = yes` is a share parameter (research R2), rendered in the share
   file rather than the globals.
 

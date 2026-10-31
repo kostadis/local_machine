@@ -4,6 +4,8 @@
 
 use std::path::Path;
 
+use crate::ExitError;
+use crate::system::action::{Gate, GateResult};
 use crate::system::{Cmd, System};
 
 use super::config::ExportConfig;
@@ -237,6 +239,28 @@ pub fn detect(cfg: &ExportConfig, sys: &dyn System) -> Report {
         share_defined,
         smbd_enabled,
         smbd_active,
+    }
+}
+
+/// `start` and `stop` run only once `export setup` has completed.
+pub struct SetUp<'a>(pub &'a ExportConfig);
+
+impl Gate for SetUp<'_> {
+    fn check(&self, sys: &dyn System) -> GateResult {
+        let report = detect(self.0, sys);
+        if report.state == ShareState::NotSetUp {
+            GateResult::Refuse(ExitError::new(
+                ExitError::NOT_SET_UP,
+                report.not_set_up_message(),
+            ))
+        } else if !report.unknown.is_empty() {
+            GateResult::Unknown(vec![format!(
+                "check that setup is complete ({})",
+                report.unknown.join(", ")
+            )])
+        } else {
+            GateResult::Pass
+        }
     }
 }
 

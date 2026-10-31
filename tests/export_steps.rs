@@ -104,9 +104,8 @@ fn setup_on_a_fresh_machine() {
     assert_eq!(f.run(ExportAction::Setup), Ok(0));
 
     let calls = f.sys.calls();
-    let first_root = calls.iter().position(|c| c.starts_with("sudo ")).unwrap();
-    assert_eq!(
-        calls[first_root], "sudo -v",
+    assert!(
+        f.sys.prompted(),
         "privilege notice comes before any root command"
     );
     position(
@@ -134,9 +133,22 @@ fn setup_twice_changes_nothing_the_second_time() {
     f.setup();
     assert_eq!(f.run(ExportAction::Setup), Ok(0));
     let calls = f.sys.calls();
+    assert!(!f.sys.prompted(), "nothing to do: no notice");
     assert!(!calls.iter().any(|c| c.contains("apt-get")));
     assert!(!calls.iter().any(|c| c.contains("smbpasswd")));
     assert!(!calls.iter().any(|c| c.starts_with("install ")));
+}
+
+#[test]
+fn setup_asks_for_sudo_when_root_only_checks_are_unknown() {
+    let f = Fixture::new();
+    f.setup();
+    f.sys.respond(
+        "sudo -n pdbedit -L",
+        Output::fail(1, "a password is required"),
+    );
+    assert_eq!(f.run(ExportAction::Setup), Err(ExitError::FAILED));
+    assert!(f.sys.prompted());
 }
 
 #[test]
@@ -163,7 +175,7 @@ fn setup_rejects_mismatched_passwords_and_rolls_back() {
 fn start_before_setup_refuses_and_changes_nothing() {
     let f = Fixture::new();
     assert_eq!(f.run(ExportAction::Start), Err(ExitError::NOT_SET_UP));
-    assert!(!f.sys.calls().contains(&"sudo -v".to_string()), "no prompt");
+    assert!(!f.sys.prompted(), "no prompt");
     assert!(f.sys.root_calls().iter().all(|c| c.starts_with("sudo -n ")));
     assert!(!f.sys.calls().iter().any(|c| c.starts_with("install ")));
 }
@@ -174,13 +186,7 @@ fn start_makes_the_share_available_once() {
     f.setup();
     assert_eq!(f.run(ExportAction::Start), Ok(0));
     let calls = f.sys.calls();
-    assert_eq!(
-        calls
-            .iter()
-            .find(|c| c.starts_with("sudo ") && !c.starts_with("sudo -n "))
-            .unwrap(),
-        "sudo -v"
-    );
+    assert!(f.sys.prompted());
     position(&calls, "sudo systemctl enable --now smbd");
     assert_eq!(
         f.sys.file(samba::SHARE_PATH).unwrap(),
@@ -190,6 +196,7 @@ fn start_makes_the_share_available_once() {
     f.mark_smbd(true);
     f.sys.clear_calls();
     assert_eq!(f.run(ExportAction::Start), Ok(0));
+    assert!(!f.sys.prompted(), "already available: no notice");
     assert!(!f.sys.calls().iter().any(|c| c.contains("systemctl enable")));
     assert!(!f.sys.calls().iter().any(|c| c.starts_with("install ")));
 }
@@ -253,8 +260,7 @@ fn status_exit_codes_and_no_prompts() {
     f.mark_smbd(true);
     f.sys.clear_calls();
     assert_eq!(f.run(ExportAction::Status), Ok(0));
-    let calls = f.sys.calls();
-    assert!(!calls.contains(&"sudo -v".to_string()));
+    assert!(!f.sys.prompted());
     assert!(f.sys.root_calls().iter().all(|c| c.starts_with("sudo -n ")));
 
     std::fs::remove_file(f.config_dir.path().join("export.yaml")).unwrap();
@@ -322,6 +328,7 @@ fn stop_then_stop_again() {
     f.mark_smbd(false);
     f.sys.clear_calls();
     assert_eq!(f.run(ExportAction::Stop), Ok(0));
+    assert!(!f.sys.prompted(), "nothing to stop: no notice");
     assert!(f.sys.root_calls().iter().all(|c| c.starts_with("sudo -n ")));
 }
 
@@ -329,7 +336,7 @@ fn stop_then_stop_again() {
 fn stop_before_setup_refuses_without_installing() {
     let f = Fixture::new();
     assert_eq!(f.run(ExportAction::Stop), Err(ExitError::NOT_SET_UP));
-    assert!(!f.sys.calls().contains(&"sudo -v".to_string()), "no prompt");
+    assert!(!f.sys.prompted(), "no prompt");
     assert!(!f.sys.calls().iter().any(|c| c.contains("apt-get")));
 }
 

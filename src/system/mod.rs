@@ -3,9 +3,9 @@
 //! Everything that touches the machine goes through [`System`], so actions can be tested
 //! against [`fake::FakeSystem`] without changing the real machine.
 
+pub mod action;
 pub mod fake;
 pub mod files;
-pub mod steps;
 
 use std::io::Write;
 use std::os::unix::fs::MetadataExt;
@@ -148,6 +148,7 @@ pub fn run_ok(sys: &dyn System, cmd: &Cmd) -> Result<Output> {
 }
 
 /// Say which privileged steps may follow, then cache sudo credentials (FR-009).
+/// Actions call this through [`action::run`], which decides whether it is needed.
 pub fn sudo_preflight(sys: &dyn System, steps: &[String]) -> Result<()> {
     println!("needs administrator privileges for:");
     for s in steps {

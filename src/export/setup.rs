@@ -5,70 +5,67 @@ use std::path::Path;
 
 use anyhow::{Result, bail};
 
+use crate::system::action::{self, Action, AfterChange, Check, Step};
 use crate::system::files::{self, Backup};
-use crate::system::steps::{Check, Step, run_steps};
-use crate::system::{Cmd, System, run_ok, sudo_preflight};
+use crate::system::{Cmd, System, run_ok};
 
 use super::config::ExportConfig;
 use super::samba;
 use super::state::{self, Presence};
 
 pub fn run(cfg: &ExportConfig, sys: &dyn System) -> Result<u8> {
-    sudo_preflight(
-        sys,
-        &[
-            "install samba (apt-get)".to_string(),
-            format!(
-                "write {} and include it from {}",
-                samba::GLOBALS_PATH,
-                samba::SMB_CONF
-            ),
-            format!("set the Samba password for {} (smbpasswd)", cfg.owner),
-            format!(
-                "allow Samba from {} in ufw, if ufw is active",
-                cfg.allowed_network
-            ),
-            "disable nmbd".to_string(),
-        ],
-    )?;
-    let smbd_active_before = state::unit_active(sys, "smbd");
-    let mut steps: Vec<Box<dyn Step>> = vec![
-        Box::new(SambaPackage),
-        Box::new(GlobalConfig::new(cfg)),
-        Box::new(IncludeLine::default()),
-        Box::new(SambaUser { cfg: cfg.clone() }),
-        Box::new(Firewall { cfg: cfg.clone() }),
-        Box::new(NmbdDisabled),
-    ];
-    let changed = run_steps(sys, &mut steps)?;
     // New global settings (e.g. hosts allow) take effect on a running share without
     // changing whether it is available.
-    if changed && smbd_active_before {
-        run_ok(
-            sys,
-            &Cmd::new("smbcontrol")
-                .args(["smbd", "reload-config"])
-                .sudo(),
-        )?;
-        println!("changed: reload smbd");
-    }
+    let after_change =
+        state::unit_active(sys, "smbd").then(|| reload_smbd("reload smbd, if settings change"));
+    action::run(
+        sys,
+        Action {
+            gate: None,
+            steps: vec![
+                Box::new(SambaPackage),
+                Box::new(GlobalConfig::new(cfg)),
+                Box::new(IncludeLine::default()),
+                Box::new(SambaUser { cfg: cfg.clone() }),
+                Box::new(Firewall { cfg: cfg.clone() }),
+                Box::new(NmbdDisabled),
+            ],
+            after_change,
+        },
+    )?;
     println!("export: set up");
     Ok(0)
 }
 
-/// A step's check, from the shared component check. `Unknown` after the sudo preflight
-/// means sudo still refused, which is an error rather than a guess.
-fn component_check(name: &str, cfg: &ExportConfig, sys: &dyn System) -> Result<Check> {
-    to_check(name, state::check(name, cfg, sys))
+/// Make a running smbd pick up changed configuration.
+pub fn reload_smbd(notice: &str) -> AfterChange<'static> {
+    AfterChange {
+        name: "reload smbd".to_string(),
+        notice: Some(notice.to_string()),
+        run: Box::new(|sys| {
+            run_ok(
+                sys,
+                &Cmd::new("smbcontrol")
+                    .args(["smbd", "reload-config"])
+                    .sudo(),
+            )?;
+            Ok(())
+        }),
+    }
 }
 
-fn to_check(name: &str, presence: Presence) -> Result<Check> {
-    match presence {
-        Presence::Present => Ok(Check::Done),
-        Presence::PresentWith(note) => Ok(Check::DoneWith(note)),
-        Presence::Missing { reason, .. } => Ok(Check::NeedsChange(reason)),
-        Presence::Unknown => bail!("could not check {name}: sudo refused"),
-    }
+/// A step's check, from the shared component check.
+fn component_check(name: &str, cfg: &ExportConfig, sys: &dyn System) -> Result<Check> {
+    to_check(state::check(name, cfg, sys))
+}
+
+fn to_check(presence: Presence) -> Result<Check> {
+    Ok(match presence {
+        Presence::Present => Check::Done,
+        Presence::PresentWith(note) => Check::DoneWith(note),
+        Presence::Missing { reason, .. } => Check::NeedsChange(reason),
+        Presence::Unknown => Check::Unknown,
+    })
 }
 
 /// `testparm` must accept the combined configuration before a change is kept.
@@ -87,8 +84,12 @@ impl Step for SambaPackage {
         state::SAMBA_PACKAGE
     }
 
+    fn notice(&self, _found: &Check) -> Option<String> {
+        Some("install samba (apt-get)".to_string())
+    }
+
     fn check(&self, sys: &dyn System) -> Result<Check> {
-        to_check(state::SAMBA_PACKAGE, state::samba_package(sys))
+        to_check(state::samba_package(sys))
     }
 
     fn apply(&mut self, sys: &dyn System) -> Result<()> {
@@ -154,6 +155,10 @@ impl Step for GlobalConfig {
         state::GLOBAL_CONFIG
     }
 
+    fn notice(&self, _found: &Check) -> Option<String> {
+        Some(format!("write {}", samba::GLOBALS_PATH))
+    }
+
     fn check(&self, sys: &dyn System) -> Result<Check> {
         component_check(state::GLOBAL_CONFIG, &self.cfg, sys)
     }
@@ -194,8 +199,16 @@ impl Step for IncludeLine {
         state::INCLUDE_LINE
     }
 
+    fn notice(&self, _found: &Check) -> Option<String> {
+        Some(format!(
+            "include {} from {}",
+            samba::GLOBALS_PATH,
+            samba::SMB_CONF
+        ))
+    }
+
     fn check(&self, sys: &dyn System) -> Result<Check> {
-        to_check(state::INCLUDE_LINE, state::include_line(sys))
+        to_check(state::include_line(sys))
     }
 
     fn apply(&mut self, sys: &dyn System) -> Result<()> {
@@ -234,6 +247,16 @@ impl Step for SambaUser {
         state::SAMBA_USER
     }
 
+    fn notice(&self, found: &Check) -> Option<String> {
+        let owner = &self.cfg.owner;
+        Some(match found {
+            Check::Unknown => {
+                format!("check that {owner} has a Samba password (pdbedit); set it if not")
+            }
+            _ => format!("set the Samba password for {owner} (smbpasswd)"),
+        })
+    }
+
     fn check(&self, sys: &dyn System) -> Result<Check> {
         component_check(state::SAMBA_USER, &self.cfg, sys)
     }
@@ -267,6 +290,14 @@ struct Firewall {
 impl Step for Firewall {
     fn name(&self) -> &str {
         state::FIREWALL
+    }
+
+    fn notice(&self, found: &Check) -> Option<String> {
+        let network = &self.cfg.allowed_network;
+        Some(match found {
+            Check::Unknown => format!("check ufw; allow Samba from {network} if ufw is active"),
+            _ => format!("allow Samba from {network} in ufw"),
+        })
     }
 
     fn check(&self, sys: &dyn System) -> Result<Check> {
@@ -307,8 +338,12 @@ impl Step for NmbdDisabled {
         state::NMBD_DISABLED
     }
 
+    fn notice(&self, _found: &Check) -> Option<String> {
+        Some("disable nmbd".to_string())
+    }
+
     fn check(&self, sys: &dyn System) -> Result<Check> {
-        to_check(state::NMBD_DISABLED, state::nmbd_disabled(sys))
+        to_check(state::nmbd_disabled(sys))
     }
 
     fn apply(&mut self, sys: &dyn System) -> Result<()> {

@@ -57,6 +57,24 @@ impl FakeSystem {
         self.calls.borrow_mut().clear();
     }
 
+    /// Whether the privilege notice prompted (`sudo -v`). Panics if any command ran with
+    /// full root before it: the rule every privileged action must keep.
+    pub fn prompted(&self) -> bool {
+        let calls = self.calls();
+        let notice = calls.iter().position(|c| c == "sudo -v");
+        let first_root = calls
+            .iter()
+            .position(|c| c.starts_with("sudo ") && !c.starts_with("sudo -n ") && c != "sudo -v");
+        if let Some(r) = first_root {
+            assert!(
+                notice.is_some_and(|n| n < r),
+                "`{}` ran with root before the privilege notice; calls: {calls:#?}",
+                calls[r]
+            );
+        }
+        notice.is_some()
+    }
+
     /// Calls that ran with root (`sudo ...`), excluding `sudo -v`.
     pub fn root_calls(&self) -> Vec<String> {
         self.calls()

@@ -2,64 +2,35 @@
 
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 
-use crate::ExitError;
+use crate::system::action::{self, Action, Check, Step};
 use crate::system::files::{self, Backup};
-use crate::system::steps::{Check, Step, run_steps};
-use crate::system::{Cmd, System, run_ok, sudo_preflight};
+use crate::system::{Cmd, System, run_ok};
 
 use super::config::ExportConfig;
-use super::setup::validate;
-use super::state::{self, ShareState};
+use super::setup::{reload_smbd, validate};
+use super::state;
 use super::{connect, samba};
 
 pub fn run(cfg: &ExportConfig, sys: &dyn System) -> Result<u8> {
-    // Refuse before prompting when the unprivileged checks already show setup is missing.
-    let report = state::detect(cfg, sys);
-    if report.state == ShareState::NotSetUp {
-        return Err(ExitError::new(ExitError::NOT_SET_UP, report.not_set_up_message()).into());
-    }
-    sudo_preflight(
+    // A running smbd only sees a new share after a reload; a freshly started one already has it.
+    let after_change =
+        state::unit_active(sys, "smbd").then(|| reload_smbd("reload smbd, if the share changes"));
+    action::run(
         sys,
-        &[
-            format!("write {}", samba::SHARE_PATH),
-            "enable and start smbd".to_string(),
-            "reload smbd".to_string(),
-        ],
+        Action {
+            gate: Some(Box::new(state::SetUp(cfg))),
+            steps: vec![
+                Box::new(ShareStanza {
+                    cfg: cfg.clone(),
+                    backup: None,
+                }),
+                Box::new(SmbdRunning),
+            ],
+            after_change,
+        },
     )?;
-    let report = state::detect(cfg, sys);
-    if report.state == ShareState::NotSetUp {
-        return Err(ExitError::new(ExitError::NOT_SET_UP, report.not_set_up_message()).into());
-    }
-    if !report.unknown.is_empty() {
-        bail!(
-            "could not check {}: sudo refused",
-            report.unknown.join(", ")
-        );
-    }
-
-    let share_changes = sys.read_file(Path::new(samba::SHARE_PATH)).as_deref()
-        != Some(samba::render_share(cfg).as_str());
-    let mut steps: Vec<Box<dyn Step>> = vec![
-        Box::new(ShareStanza {
-            cfg: cfg.clone(),
-            backup: None,
-        }),
-        Box::new(SmbdRunning),
-    ];
-    run_steps(sys, &mut steps)?;
-    // A running smbd only sees the new share after a reload; a freshly started one already has it.
-    if share_changes && report.smbd_active {
-        run_ok(
-            sys,
-            &Cmd::new("smbcontrol")
-                .args(["smbd", "reload-config"])
-                .sudo(),
-        )?;
-        println!("changed: reload smbd");
-    }
-
     println!("export: available");
     for line in connect::lines(cfg, connect::local_address(cfg, sys)) {
         println!("{line}");
@@ -75,6 +46,10 @@ struct ShareStanza {
 impl Step for ShareStanza {
     fn name(&self) -> &str {
         "share-stanza"
+    }
+
+    fn notice(&self, _found: &Check) -> Option<String> {
+        Some(format!("write {}", samba::SHARE_PATH))
     }
 
     fn check(&self, sys: &dyn System) -> Result<Check> {
@@ -113,6 +88,10 @@ struct SmbdRunning;
 impl Step for SmbdRunning {
     fn name(&self) -> &str {
         "smbd-enabled"
+    }
+
+    fn notice(&self, _found: &Check) -> Option<String> {
+        Some("enable and start smbd".to_string())
     }
 
     fn check(&self, sys: &dyn System) -> Result<Check> {

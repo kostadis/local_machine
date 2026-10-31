@@ -2,48 +2,29 @@
 
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 
-use crate::ExitError;
-use crate::system::steps::{Check, Step, run_steps};
-use crate::system::{Cmd, System, run_ok, sudo_preflight};
+use crate::system::action::{self, Action, Check, Step};
+use crate::system::{Cmd, System, run_ok};
 
 use super::config::ExportConfig;
 use super::samba;
-use super::state::{self, ShareState};
+use super::state;
 
 pub fn run(cfg: &ExportConfig, sys: &dyn System) -> Result<u8> {
-    // Refuse before prompting when the unprivileged checks already show setup is missing.
-    let report = state::detect(cfg, sys);
-    if report.state == ShareState::NotSetUp {
-        return Err(ExitError::new(ExitError::NOT_SET_UP, report.not_set_up_message()).into());
-    }
-    sudo_preflight(
+    let changed = action::run(
         sys,
-        &[
-            format!("empty {}", samba::SHARE_PATH),
-            "reload smbd".to_string(),
-            "disable and stop smbd".to_string(),
-        ],
+        Action {
+            gate: Some(Box::new(state::SetUp(cfg))),
+            steps: vec![Box::new(ShareRemoved), Box::new(SmbdStopped)],
+            after_change: None,
+        },
     )?;
-    let report = state::detect(cfg, sys);
-    if report.state == ShareState::NotSetUp {
-        return Err(ExitError::new(ExitError::NOT_SET_UP, report.not_set_up_message()).into());
-    }
-    if !report.unknown.is_empty() {
-        bail!(
-            "could not check {}: sudo refused",
-            report.unknown.join(", ")
-        );
-    }
-    if !report.share_defined && !report.smbd_enabled && !report.smbd_active {
+    if changed {
+        println!("export: not available");
+    } else {
         println!("export: nothing was shared");
-        return Ok(0);
     }
-
-    let mut steps: Vec<Box<dyn Step>> = vec![Box::new(ShareRemoved), Box::new(SmbdStopped)];
-    run_steps(sys, &mut steps)?;
-    println!("export: not available");
     Ok(0)
 }
 
@@ -52,6 +33,10 @@ struct ShareRemoved;
 impl Step for ShareRemoved {
     fn name(&self) -> &str {
         "share-stanza-removed"
+    }
+
+    fn notice(&self, _found: &Check) -> Option<String> {
+        Some(format!("empty {} and reload smbd", samba::SHARE_PATH))
     }
 
     fn check(&self, sys: &dyn System) -> Result<Check> {
@@ -82,6 +67,10 @@ struct SmbdStopped;
 impl Step for SmbdStopped {
     fn name(&self) -> &str {
         "smbd-disabled"
+    }
+
+    fn notice(&self, _found: &Check) -> Option<String> {
+        Some("disable and stop smbd".to_string())
     }
 
     fn check(&self, sys: &dyn System) -> Result<Check> {
