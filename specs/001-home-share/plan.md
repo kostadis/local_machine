@@ -90,7 +90,9 @@ src/
     ├── setup.rs              # SetupComponent steps
     ├── start.rs
     ├── status.rs             # report, reachability, drift, symlink warnings
-    └── stop.rs
+    ├── stop.rs
+    ├── connect.rs            # local address in allowed_network; Windows path, Unix mount line
+    └── symlinks.rs           # depth-limited scan for symlinks into excluded names
 tests/
 ├── cli.rs                    # assert_cmd: grammar, help, exit codes, config errors
 └── export_steps.rs           # step plans against FakeRunner (idempotence, rollback)
@@ -108,6 +110,8 @@ module directory, mirroring the command tree.
 3. **Symlinks into excluded names: warn only (R7)** — the exclusion list is a convenience,
    not a security boundary. `follow symlinks = yes`, `wide links = no`; `status` warns.
    Spec edge case amended.
+4. **Network/owner changes require `export setup` again (R5)** — `start` and `status` detect
+   the mismatch and say so; spec edge case amended.
 
 ## Complexity Tracking
 

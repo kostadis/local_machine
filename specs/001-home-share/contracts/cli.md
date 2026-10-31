@@ -18,8 +18,9 @@ local-machine export <action> [--config-dir DIR]
 ## Common behaviour
 
 - Output: human-readable lines on stdout; errors on stderr prefixed `error:`.
-- Before the first privileged step, an action prints `needs administrator privileges for:`
-  followed by the steps, then calls `sudo -v` once.
+- `setup`, `start`, and `stop` begin — before any check — by printing
+  `needs administrator privileges for:` followed by the privileged steps they may take,
+  then call `sudo -v` once (FR-009). `status` never does this and never prompts.
 - Each change is printed as `changed: <step>`; each already-correct step as `ok: <step>`.
 - A failing step prints `error: <step>: <reason>` and the action exits non-zero, having
   restored any file it replaced.
@@ -42,6 +43,8 @@ local-machine export <action> [--config-dir DIR]
 - Requires config. Ensures every SetupComponent (see data-model) is present.
 - Prompts for the share password only when the owner has no Samba password yet (no echo,
   asked twice, must match). Never prints or stores it.
+- Re-running after `allowed_network` changes rewrites the globals and replaces the firewall
+  rule (any `Samba` rule for another network is deleted).
 - Does not change whether the share is available.
 - Exit 0 when all components are present afterwards.
 
@@ -49,12 +52,16 @@ local-machine export <action> [--config-dir DIR]
 
 - Requires config and complete setup (else exit 3 / 4 with a message naming the fix).
 - Ensures the share stanza matches config and `smbd` is enabled and active.
-- Re-running with changed config applies the change.
+- Re-running with a changed `share_name`, `path`, or `exclude` applies the change.
+- A changed `allowed_network` or `owner` makes setup incomplete: `start` exits 4 with
+  `export: configuration changed — run 'local-machine export setup'`.
 - On success prints the connect lines (same as `status`).
 
 ### `export status`
 
-- Needs no privileges; never changes anything.
+- Needs no privileges; never changes anything; never prompts. Root-only checks run with
+  `sudo -n`; if that fails the component shows as `unknown` (a `warning:` line suggesting
+  `sudo -v` first), never as missing.
 - Example (available):
 
   ```text
@@ -68,7 +75,10 @@ local-machine export <action> [--config-dir DIR]
 - Not available: `export: set up, not available` (exit 5); not set up:
   `export: not set up — run 'local-machine export setup'` plus the missing components
   (exit 4); not configured: names the file and missing key (exit 3).
-- Also prints `warning:` lines for config drift and for symlinks into excluded names.
+- Also prints `warning:` lines for config drift, for symlinks into excluded names (scan
+  limited to 4 levels below the shared path; a note says when the limit was hit), and for
+  a setup-level config change (`configuration changed — run 'local-machine export setup'`).
+  The `network:` line uses `yes`/`no` for reachability and `unknown` for an unread firewall.
 
 ### `export stop`
 

@@ -60,6 +60,14 @@ Environment observed on the target machine (2026-10-30): Ubuntu 26.04 LTS, Rust/
   the port at all.
 - **Also**: `disable netbios = yes` (and `nmbd` stays disabled) — Windows and Linux both
   connect by address over TCP 445; NetBIOS name service is unnecessary attack surface.
+- **Printing off**: the packaged `smb.conf` defines `[printers]` and `[print$]`. Globals set
+  `load printers = no`, `printing = bsd`, `printcap name = /dev/null`,
+  `disable spoolss = yes`, so no printer shares appear when `smbd` runs; `[print$]` remains
+  but is subject to the same `hosts allow` and owner-only authentication.
+- **Network changes (owner decision 2026-10-30)**: changing `allowed_network` requires
+  re-running `export setup`, which rewrites the globals and replaces the firewall rule
+  (removing any `Samba` rule for a different network). `start` and `status` detect the
+  mismatch and point to `setup`.
 
 ## R6. Exclusion list (FR-014)
 
@@ -84,18 +92,29 @@ Environment observed on the target machine (2026-10-30): Ubuntu 26.04 LTS, Rust/
   within the share path, and `veto files` checks the requested name, not the target. Plan:
   `export status` warns if any symlink under home resolves into an excluded path.
   Quickstart V8 verifies.
+- **Scan depth**: the warning scan walks at most 4 directory levels below the shared path,
+  skipping excluded directories and not following symlinked directories, so `status` stays
+  fast on a large home directory. When the limit is reached, status says the scan was
+  partial. A deeper link is not detected; acceptable because exclusions are a convenience.
 
 ## R8. Making the share available / unavailable and persistent (FR-006, FR-008)
 
 - **Decision**:
   - `setup` installs `samba`, writes the global settings file
-    `/etc/samba/local-machine-export.conf`, adds one `include =` line for it to
+    `/etc/samba/local-machine-export.conf`, adds one `include =` line for it to the end of
     `/etc/samba/smb.conf`, registers the password, configures the firewall, and **leaves
     `smbd` in whatever state it was** (FR-004).
   - `start` writes the share stanza to `/etc/samba/local-machine-export-share.conf`
     (included from the global file), validates with `testparm -s`, then
     `systemctl enable --now smbd` and `smbcontrol smbd reload-config`.
   - `stop` removes the share stanza, reloads, then `systemctl disable --now smbd`.
+- **Include placement**: Samba treats an `include` as part of whatever section precedes it,
+  and Ubuntu's packaged `smb.conf` ends with the `[print$]` share. The global settings file
+  therefore MUST begin with its own `[global]` header (Samba merges repeated `[global]`
+  sections); otherwise every hardening setting would be applied to `[print$]` and ignored.
+  The share file begins with its `[<share_name>]` header, so its include is safe.
+- **Installing samba starts smbd**: the Ubuntu package enables and starts `smbd` on install.
+  `setup` records smbd's state before installing and restores it afterwards (FR-004).
 - **Rationale**: systemd `enable` gives reboot persistence; the share's presence is a file,
   so state is inspectable and changes are atomic (write temp file, `testparm`, rename).
 - **Alternatives considered**: Editing `smb.conf` in place (fragile, clashes with the
@@ -107,8 +126,13 @@ Environment observed on the target machine (2026-10-30): Ubuntu 26.04 LTS, Rust/
   owner) and invokes `sudo` for each privileged command. Before the first change, an action
   prints the privileged steps it will take and runs `sudo -v` once.
 - **Rationale**: Running the whole tool under `sudo` would make `~` resolve to `/root`.
-  `status` needs no privileges except reading the firewall state; if `sudo` is unavailable
-  non-interactively it reports the firewall as "unknown" rather than prompting.
+- **Ordering (FR-009)**: `setup`, `start`, and `stop` print the privileged steps they may
+  take and run `sudo -v` **before any check**, so no check can trigger a sudo prompt ahead of
+  that notice.
+- **Checks never prompt**: every check that needs root (`pdbedit -L`, `ufw status`) runs as
+  `sudo -n`. With credentials cached by the preflight it succeeds; without (as in `status`,
+  which never runs `sudo -v`) the component is reported as `unknown`, never as missing.
+  `status` therefore needs no privileges and never prompts.
 
 ## R10. Atomicity and idempotence (FR-002, FR-009)
 

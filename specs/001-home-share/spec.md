@@ -138,8 +138,10 @@ run `export stop`, then confirm neither can reach it, including after a reboot.
   before; re-running the action completes it.
 - Configuration is missing or lacks a required value: the action stops, naming the missing
   value and the config file; it never guesses machine-specific values.
-- The configuration changes while the share is available: running `export start` again
-  applies the new configuration.
+- The configuration changes while the share is available: running `export setup` and then
+  `export start` applies the new configuration. Until setup is re-run, `export start` and
+  `export status` report that the configuration has changed and name `export setup` as the
+  fix; a share left from the old configuration is never silently kept in sync.
 - The Ubuntu machine is not reachable from the home network: `export status` reports the
   share as available on the machine but not reachable from the configured network.
 - Someone connects with wrong credentials, or from outside the configured network: access is
