@@ -73,14 +73,16 @@ specs/001-home-share/
 ### Source Code (repository root)
 
 ```text
-Cargo.toml                    # crate `local-machine`, binary `local-machine`
+Cargo.toml                    # crate `local-machine`: library + binary `local-machine`
 src/
-├── main.rs                   # parse CLI, dispatch, map errors to exit codes
+├── main.rs                   # parse CLI, run, print error, exit code
+├── lib.rs                    # run(), ExitError, exit-code mapping (lib so tests/ can use FakeSystem)
 ├── cli.rs                    # clap tree: global --config-dir, `export <action>`
 ├── config.rs                 # shared: resolve config dir, load <name>.yaml (any subcommand)
 ├── system/
-│   ├── mod.rs                # CommandRunner trait (real + fake), sudo preflight
-│   ├── files.rs              # atomic write with backup/restore
+│   ├── mod.rs                # System trait + RealSystem, Cmd, sudo preflight
+│   ├── fake.rs               # FakeSystem for tests
+│   ├── files.rs              # replace with in-memory backup/restore
 │   └── steps.rs              # Step trait: check() -> Done|NeedsChange, apply(); runner prints ok/changed
 └── export/
     ├── mod.rs                # action dispatch
@@ -113,6 +115,16 @@ module directory, mirroring the command tree.
 4. **Network/owner changes require `export setup` again (R5)** — `start` and `status` detect
    the mismatch and say so; spec edge case amended.
 
+## Implementation Notes (2026-10-31)
+
+- `System` (one trait for commands, managed files, directory ownership, password prompt)
+  replaces the planned `CommandRunner`, so file effects are faked in tests too.
+- Backups for rollback are kept in memory for the duration of an action instead of
+  `<path>.local-machine.bak` files; managed files are small and rollback happens in-process.
+- Each action calls `sudo_preflight` itself before checking state; `run_steps` does not.
+- `smb3 unix extensions = yes` is a share parameter (research R2), rendered in the share
+  file rather than the globals.
+
 ## Complexity Tracking
 
-No constitution violations.
+No constitution violations (re-checked after implementation, T033).

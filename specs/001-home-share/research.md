@@ -22,8 +22,10 @@ Environment observed on the target machine (2026-10-30): Ubuntu 26.04 LTS, Rust/
 
 ## R2. Faithful Unix permissions for Unix clients (FR-017)
 
-- **Decision**: Enable SMB 3.1.1 POSIX extensions on the server
-  (`server smb3 unix extensions = yes`); Unix clients mount with the `posix` option.
+- **Decision**: Enable SMB 3.1.1 POSIX extensions on the share
+  (`smb3 unix extensions = yes`, a per-share parameter — verified against the Samba 4.23
+  `smb.conf(5)` shipped in Ubuntu 26.04, where it defaults to `yes`; set explicitly so the
+  intent is visible). Unix clients mount with the `posix` option.
 - **Rationale**: Samba 4.23 (Ubuntu 26.04's version) supports them. Unix clients then see
   real mode bits, the executable bit, and symlinks; Windows clients are unaffected.
 - **Alternatives considered**: Fixed `create mask`/`force create mode` (would rewrite
