@@ -41,11 +41,13 @@ impl Fixture {
 
     fn write_config(&self, network: &str) {
         std::fs::write(
+            self.config_dir.path().join("machine.yaml"),
+            format!("allowed_network: {network}\n"),
+        )
+        .unwrap();
+        std::fs::write(
             self.config_dir.path().join("export.yaml"),
-            format!(
-                "allowed_network: {network}\npath: {}\n",
-                self.home.path().display()
-            ),
+            format!("path: {}\n", self.home.path().display()),
         )
         .unwrap();
     }
@@ -294,10 +296,7 @@ fn status_detects_share_drift() {
     assert_eq!(f.run(ExportAction::Start), Ok(0));
     std::fs::write(
         f.config_dir.path().join("export.yaml"),
-        format!(
-            "allowed_network: 192.168.1.0/24\npath: {}\nexclude: [.ssh]\n",
-            f.home.path().display()
-        ),
+        format!("path: {}\nexclude: [.ssh]\n", f.home.path().display()),
     )
     .unwrap();
     let report = state::detect(&f.cfg(), &f.sys);
@@ -349,4 +348,23 @@ fn password_never_reaches_a_command_line() {
     assert!(!f.sys.calls().iter().any(|c| c.contains("s3cret-pw")));
     let config = std::fs::read_to_string(f.config_dir.path().join("export.yaml")).unwrap();
     assert!(!config.contains("s3cret-pw"));
+}
+
+#[test]
+fn a_leftover_allowed_network_in_export_yaml_names_machine_yaml() {
+    let f = Fixture::new();
+    std::fs::write(
+        f.config_dir.path().join("export.yaml"),
+        "allowed_network: 192.168.1.0/24\n",
+    )
+    .unwrap();
+    let err = export::run(ExportAction::Status, f.config_dir.path(), &f.sys).unwrap_err();
+    assert_eq!(exit_code(&err), ExitError::NOT_CONFIGURED);
+    assert!(
+        err.to_string().contains(&format!(
+            "allowed_network: moved to {}/machine.yaml",
+            f.config_dir.path().display()
+        )),
+        "{err}"
+    );
 }

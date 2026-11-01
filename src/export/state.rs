@@ -6,7 +6,7 @@ use std::path::Path;
 
 use crate::ExitError;
 use crate::system::action::{Gate, GateResult};
-use crate::system::{Cmd, System};
+use crate::system::{Cmd, System, ufw};
 
 use super::config::ExportConfig;
 use super::samba;
@@ -117,22 +117,16 @@ fn samba_user(cfg: &ExportConfig, sys: &dyn System) -> Presence {
     }
 }
 
-/// Parsed `ufw status`: `None` when inactive, else the sources of `Samba` rules.
+/// Parsed `ufw status`: `None` when inactive, else the sources of `Samba` ALLOW rules.
 pub fn parse_ufw(stdout: &str) -> Option<Vec<String>> {
-    if !stdout.lines().any(|l| l.trim() == "Status: active") {
-        return None;
-    }
-    let mut sources = Vec::new();
-    for line in stdout.lines() {
-        let tokens: Vec<&str> = line.split_whitespace().collect();
-        if tokens.first() == Some(&"Samba")
-            && tokens.contains(&"ALLOW")
-            && let Some(from) = tokens.last()
-        {
-            sources.push(from.to_string());
-        }
-    }
-    Some(sources)
+    let rules = ufw::parse_status(stdout)?;
+    Some(
+        rules
+            .into_iter()
+            .filter(|r| r.to == "Samba" && r.allows())
+            .map(|r| r.from)
+            .collect(),
+    )
 }
 
 fn firewall(cfg: &ExportConfig, sys: &dyn System) -> Presence {

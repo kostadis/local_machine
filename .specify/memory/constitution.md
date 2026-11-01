@@ -1,5 +1,18 @@
 <!--
 Sync Impact Report
+- Version change: 1.4.0 → 1.4.1 (PATCH: clarifies Principle II's one-home rule; owner
+  decisions D1 and R3, 2026-11-01, feature 002)
+- Modified principles:
+  - II. Configuration, Not Hardcoding: records the shared file `machine.yaml` and its schema
+    (`allowed_network` required; `owner` optional, never root); allows a subcommand to read,
+    never write, another tool's own config file at a path named in its own config, for
+    values that tool owns, without copying them into `local-machine` config
+- Resolved deferral (from 1.3.0): shared config file name/schema → `machine.yaml`
+- Added/removed sections: none
+- CLAUDE.md updated in the same change (Governance sync rule)
+- Deferred: none
+
+Previous report (1.4.0):
 - Version change: 1.3.0 → 1.4.0 (MINOR: new principle added; Source Control expanded)
 - Added principles:
   - VI. Privileged Actions: Look, Then Ask — every action that needs root goes through the
@@ -115,8 +128,14 @@ Configuration is **isolated by default, shared by refactoring**:
   config directory, and every subcommand that uses it MUST be refactored to read it from
   there, in the same feature. Each value has exactly one home; a value MUST NOT be
   duplicated across subcommand files.
-- The shared file's name and schema are fixed by the first feature that needs one, and
-  recorded in this principle.
+- The shared file is `<config-dir>/machine.yaml` (fixed by feature 002). Its schema:
+  `allowed_network` (required; the trusted home network, a CIDR) and `owner` (optional;
+  default the invoking user; MUST NOT be `root`). Unknown keys are errors; a new key is a
+  schema change recorded here. A shared value left in a subcommand's own file is an error
+  naming `machine.yaml`, never a fallback.
+- A subcommand MAY read, and MUST NOT write, another tool's own configuration file, at a
+  path named in its own config, for values that tool owns. Those values MUST NOT be copied
+  into `local-machine` config.
 
 Rationale: the tools describe *how* to manage a machine; the config describes *which*
 machine. Keeping them apart lets the same binary manage a rebuilt or replacement VM by
@@ -211,4 +230,4 @@ consistent set of rules and code.
   targets Ubuntu only (V), and runs every action that needs root through `action::run`,
   with tests asserting the privilege order (VI).
 
-**Version**: 1.4.0 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-10-31
+**Version**: 1.4.1 | **Ratified**: 2026-10-30 | **Last Amended**: 2026-11-01

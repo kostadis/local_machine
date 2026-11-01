@@ -41,7 +41,7 @@ fn config_dir_is_accepted_before_and_after_the_subcommand() {
 #[test]
 fn every_action_without_config_exits_3_naming_the_file() {
     let dir = tempfile::tempdir().unwrap();
-    let expected = format!("no config at {}/export.yaml", dir.path().display());
+    let expected = format!("no config at {}/machine.yaml", dir.path().display());
     for action in ["setup", "start", "status", "stop"] {
         bin()
             .args(["export", action, "--config-dir"])
@@ -56,7 +56,7 @@ fn every_action_without_config_exits_3_naming_the_file() {
 fn default_config_dir_is_under_home() {
     let home = tempfile::tempdir().unwrap();
     let expected = format!(
-        "no config at {}/.config/local-machine/export.yaml",
+        "no config at {}/.config/local-machine/machine.yaml",
         home.path().display()
     );
     bin()
@@ -65,4 +65,39 @@ fn default_config_dir_is_under_home() {
         .assert()
         .code(3)
         .stderr(predicate::str::contains(expected));
+}
+
+#[test]
+fn help_lists_hypostasis() {
+    bin()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("hypostasis"));
+}
+
+#[test]
+fn hypostasis_without_action_shows_help_and_exits_2() {
+    bin()
+        .arg("hypostasis")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("setup"))
+        .stderr(predicate::str::contains("start"))
+        .stderr(predicate::str::contains("status"))
+        .stderr(predicate::str::contains("stop"));
+}
+
+#[test]
+fn hypostasis_actions_without_config_exit_3_naming_machine_yaml() {
+    let dir = tempfile::tempdir().unwrap();
+    let expected = format!("no config at {}/machine.yaml", dir.path().display());
+    for action in ["setup", "start", "status", "stop"] {
+        bin()
+            .args(["hypostasis", action, "--config-dir"])
+            .arg(dir.path())
+            .assert()
+            .code(3)
+            .stderr(predicate::str::contains(expected.clone()));
+    }
 }

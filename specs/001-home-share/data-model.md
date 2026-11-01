@@ -1,19 +1,22 @@
 # Data Model: `local-machine export`
 
+> Updated 2026-11-01 by 002: shared values moved to `machine.yaml`.
+
 ## ExportConfig (owner-edited, `<config-dir>/export.yaml`)
 
-| Field | Type | Required | Default | Validation |
-|-------|------|----------|---------|------------|
-| `allowed_network` | CIDR string | **yes** | — (machine-specific, never guessed) | Parses as IPv4/IPv6 CIDR |
-| `share_name` | string | no | `home` | 1–80 chars, `[A-Za-z0-9_-]` |
-| `path` | absolute path | no | owner's home directory | Exists, is a directory, owned by `owner` |
-| `owner` | Unix username | no | user running the tool | Exists in passwd; must not be `root` |
-| `exclude` | list of names | no | `[".ssh", ".gnupg"]` | Each non-empty, no `/`, not `.` or `..`; list may be empty only if written explicitly |
+| Field | Source | Type | Required | Default | Validation |
+|-------|--------|------|----------|---------|------------|
+| `allowed_network` | `machine.yaml` | CIDR string | **yes** | — (machine-specific, never guessed) | Parses as IPv4/IPv6 CIDR |
+| `share_name` | `export.yaml` | string | no | `home` | 1–80 chars, `[A-Za-z0-9_-]` |
+| `path` | `export.yaml` | absolute path | no | owner's home directory | Exists, is a directory, owned by `owner` |
+| `owner` | `machine.yaml` | Unix username | no | user running the tool | Exists in passwd; must not be `root` |
+| `exclude` | `export.yaml` | list of names | no | `[".ssh", ".gnupg"]` | Each non-empty, no `/`, not `.` or `..`; list may be empty only if written explicitly |
 
 Rules:
 - Unknown keys are an error (catches typos such as `exlcude`).
-- A missing file or missing `allowed_network` stops every action except `status`, which
-  reports "not configured", naming `<config-dir>/export.yaml` and the missing key.
+- A missing `machine.yaml` or missing `allowed_network` stops every action with exit 3,
+  naming the file and key. A missing `export.yaml` means all defaults.
+- `allowed_network` or `owner` left in `export.yaml` is an error naming `machine.yaml`.
 - No password field exists; a `password` key is rejected with a message pointing to
   `export setup` (FR-015).
 

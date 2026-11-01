@@ -3,6 +3,9 @@
 pub mod cli;
 pub mod config;
 pub mod export;
+pub mod hypostasis;
+pub mod machine;
+pub mod output;
 pub mod system;
 
 use std::fmt;
@@ -44,6 +47,7 @@ pub fn run(cli: &Cli, sys: &dyn System) -> anyhow::Result<u8> {
     let config_dir = config::resolve_dir(cli.config_dir.as_deref());
     match &cli.command {
         Command::Export { action } => export::run(*action, &config_dir, sys),
+        Command::Hypostasis { action } => hypostasis::run(*action, &config_dir, sys),
     }
 }
 
@@ -51,7 +55,11 @@ pub fn run(cli: &Cli, sys: &dyn System) -> anyhow::Result<u8> {
 pub fn exit_code(err: &anyhow::Error) -> u8 {
     if let Some(e) = err.downcast_ref::<ExitError>() {
         e.code
-    } else if err.downcast_ref::<config::ConfigError>().is_some() {
+    } else if err.downcast_ref::<config::ConfigError>().is_some()
+        || err
+            .chain()
+            .any(|e| e.downcast_ref::<config::ConfigError>().is_some())
+    {
         ExitError::NOT_CONFIGURED
     } else {
         ExitError::FAILED

@@ -1,0 +1,67 @@
+# local-machine hypostasis setup — NOT hypostasis's authority file.
+# Copy to ~/.config/local-machine/hypostasis.yaml (quickstart step 2).
+# Values below are Linux-Alien's, observed 2026-11-01, except the two TODO(owner) lines,
+# which have no answer on this machine yet and fail validation until filled in.
+
+authority: ~/.config/hypostasis/hypostasis.yaml   # default; may be omitted
+
+# TODO(owner): the seed copy of the authority file, kept in a checkout. None exists yet;
+# e.g. commit a copy to a private repo listed under checkouts and name it here.
+authority_source: TODO-owner-seed-copy-of-the-authority-file
+
+backup_root: "/mnt/g/My Drive/hypostasis/backups"  # Google Drive mount
+# backups:     # each defaults to a folder under backup_root
+#   rpg_library:   <backup_root>/rpg-lib
+#   flexai_social: <backup_root>/flexai-social
+#   flexai_combat: <backup_root>/flexai-combat
+#   palaces:       <backup_root>/palaces
+
+# prerequisites:   # optional; the default list is
+#   apt: [git, build-essential, python3-dev, python3-venv, pipx, sqlite3, nodejs, npm, ufw]
+
+checkouts:
+  - { path: ~/src/mneme,             repo: https://github.com/kostadis/mneme.git,             branch: main }
+  - { path: ~/src/dgx-fun,           repo: https://github.com/kostadis/dgx-fun.git,           branch: main }
+  - { path: ~/src/turbovecdb,        repo: https://github.com/kostadis/turbovecdb.git,        branch: main }
+  - { path: ~/src/Mempalace,         repo: https://github.com/kostadis/Mempalace.git,         branch: kostadis-dev }
+  - { path: ~/src/CampaignGenerator, repo: https://github.com/kostadis/CampaignGenerator.git, branch: main }
+  - { path: ~/src/mytools,           repo: https://github.com/kostadis/mytools.git,           branch: main }
+  - { path: ~/src/5e-tools-kostadis, repo: https://github.com/kostadis/5e-tools-kostadis.git, branch: kostadis-dev }
+  - { path: ~/src/homebrew-private,  repo: https://github.com/kostadis/homebrew-private.git,  branch: master }
+  - path: ~/obelisk
+    repo: https://github.com/kostadis/campaigns
+    branch: main
+    sparse: [obelisk, gm-assistant, scripts, tools, .claude]
+  - path: ~/phandalin
+    repo: https://github.com/kostadis/campaigns
+    branch: main
+    sparse: [Phandalin, gm-assistant, scripts, .claude]
+  - path: ~/out-of-the-abyss
+    repo: https://github.com/kostadis/campaigns
+    branch: main
+    sparse: [out-of-the-abyss, gm-assistant, scripts, .claude]
+  - path: ~/toee
+    repo: https://github.com/kostadis/campaigns
+    branch: main
+    sparse: [toee, gm-assistant, scripts, .claude]
+
+hypostasis_source: ~/src/mneme   # must be one of the checkout paths
+
+services:
+  venv: ~/.venvs/services
+  mytools: ~/src/mytools         # must be one of the checkout paths
+
+# TODO(owner): where the FlexAI workbooks should live. Today they sit in
+# "/mnt/g/My Drive/DriveThru/Infinium Game Studios/FlexAI Digital Resource Companion
+# (unisystem_5E_Pathfinder_P2E_OSR)/" (both apps pass --check there). A local folder plus
+# copies in <backup_root>/flexai-social and -combat lets setup restore them.
+flexai_social:
+  port: 5105
+  data_dir: TODO-owner-flexai-social-data-dir
+  # env:                        # optional; the situational feature is off when unset
+  #   CLEF_URL: http://192.168.1.121:8002/v1
+  #   CHAT_URL: http://192.168.1.121:8003/v1
+
+flexai_combat:
+  port: 5106
+  data_dir: TODO-owner-flexai-combat-data-dir

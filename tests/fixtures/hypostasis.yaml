@@ -1,0 +1,30 @@
+# Test fixture for `local-machine hypostasis` — NOT hypostasis's authority file.
+authority_source: ~/src/campaigns-private/hypostasis.yaml
+backup_root: "/mnt/g/My Drive/hypostasis/backups"
+prerequisites:
+  apt: [git, sqlite3, nodejs, npm, ufw]
+checkouts:
+  - { path: ~/src/mneme,             repo: https://github.com/kostadis/mneme.git,             branch: main }
+  - { path: ~/src/dgx-fun,           repo: https://github.com/kostadis/dgx-fun.git,           branch: main }
+  - { path: ~/src/turbovecdb,        repo: https://github.com/kostadis/turbovecdb.git,        branch: main }
+  - { path: ~/src/Mempalace,         repo: https://github.com/kostadis/Mempalace.git,         branch: kostadis-dev }
+  - { path: ~/src/CampaignGenerator, repo: https://github.com/kostadis/CampaignGenerator.git, branch: main }
+  - { path: ~/src/mytools,           repo: https://github.com/kostadis/mytools.git,           branch: main }
+  - { path: ~/src/campaigns-private, repo: https://github.com/kostadis/campaigns-private.git, branch: main }
+  - path: ~/obelisk
+    repo: https://github.com/kostadis/campaigns
+    branch: main
+    sparse: [obelisk, gm-assistant, scripts, tools, .claude]
+hypostasis_source: ~/src/mneme
+services:
+  venv: ~/.venvs/services
+  mytools: ~/src/mytools
+flexai_social:
+  port: 5105
+  data_dir: ~/data/flexai/social
+  env:
+    CLEF_URL: http://192.168.1.121:8002/v1
+    CHAT_URL: http://192.168.1.121:8003/v1
+flexai_combat:
+  port: 5106
+  data_dir: ~/data/flexai/combat

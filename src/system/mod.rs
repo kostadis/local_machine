@@ -6,11 +6,15 @@
 pub mod action;
 pub mod fake;
 pub mod files;
+pub mod net;
+pub mod ufw;
 
-use std::io::Write;
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpStream};
 use std::os::unix::fs::MetadataExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 
@@ -122,6 +126,15 @@ impl Output {
     }
 }
 
+/// What is at a path.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PathKind {
+    Missing,
+    File,
+    Dir,
+    Other,
+}
+
 pub trait System {
     fn run(&self, cmd: &Cmd) -> Result<Output>;
     fn read_file(&self, path: &Path) -> Option<String>;
@@ -132,6 +145,41 @@ pub trait System {
     fn dir_owner(&self, path: &Path) -> Option<u32>;
     fn current_user(&self) -> Option<String>;
     fn prompt_password(&self, prompt: &str) -> Result<String>;
+
+    // Owner-level operations: none of these use root.
+
+    fn path_kind(&self, path: &Path) -> PathKind;
+    /// Names of the entries directly inside `dir` (empty when it cannot be read).
+    fn list_dir(&self, dir: &Path) -> Vec<String>;
+    fn make_dir_all(&self, path: &Path) -> Result<()>;
+    /// Atomically write an owner-owned file: a temp file in the same directory, then rename.
+    fn write_user_file(&self, path: &Path, content: &str) -> Result<()>;
+    fn rename(&self, from: &Path, to: &Path) -> Result<()>;
+    fn copy_file(&self, from: &Path, to: &Path) -> Result<()>;
+    /// Remove an owner-owned file (no error when it is already gone).
+    fn remove_user_file(&self, path: &Path) -> Result<()>;
+    fn remove_dir_all(&self, path: &Path) -> Result<()>;
+    /// HTTP status of `GET <path>` on `127.0.0.1:<port>`; `None` on no answer in `timeout`.
+    fn http_status(&self, port: u16, path: &str, timeout: Duration) -> Option<u16>;
+    fn effective_uid(&self) -> u32;
+    fn home_dir(&self) -> Option<PathBuf>;
+    fn sleep(&self, duration: Duration);
+}
+
+/// Whether `cmd` could be run and exited 0.
+pub fn runs(sys: &dyn System, cmd: &Cmd) -> bool {
+    sys.run(cmd).is_ok_and(|o| o.success())
+}
+
+/// The status code from an HTTP response's first line (`HTTP/1.1 200 OK` → 200).
+pub fn parse_status_line(response: &[u8]) -> Option<u16> {
+    let text = String::from_utf8_lossy(response);
+    let first = text.lines().next()?;
+    let mut parts = first.split_whitespace();
+    if !parts.next()?.starts_with("HTTP/") {
+        return None;
+    }
+    parts.next()?.parse().ok()
 }
 
 /// Run a command and fail unless it exits 0.
@@ -150,9 +198,9 @@ pub fn run_ok(sys: &dyn System, cmd: &Cmd) -> Result<Output> {
 /// Say which privileged steps may follow, then cache sudo credentials (FR-009).
 /// Actions call this through [`action::run`], which decides whether it is needed.
 pub fn sudo_preflight(sys: &dyn System, steps: &[String]) -> Result<()> {
-    println!("needs administrator privileges for:");
+    crate::say!("needs administrator privileges for:");
     for s in steps {
-        println!("  {s}");
+        crate::say!("  {s}");
     }
     // Credentials still cached: nothing to ask, so no password line.
     if sys.run(&Cmd::new("sudo").args(["-n", "-v"]))?.success() {
@@ -161,7 +209,7 @@ pub fn sudo_preflight(sys: &dyn System, steps: &[String]) -> Result<()> {
     // sudo-rs shows a prompt as `[sudo: <prompt>] Password:`, easy to miss under the notice,
     // so say it on a line of our own first. `%` is sudo's prompt escape.
     let user = sys.current_user().unwrap_or_default();
-    println!("\n>>> enter your sudo password for {user} (needed for the steps above)");
+    crate::say!("\n>>> enter your sudo password for {user} (needed for the steps above)");
     let prompt = format!("password for {}", user.replace('%', "%%"));
     let out = sys.run(&Cmd::new("sudo").args(["-v", "-p", &prompt]).interactive())?;
     if !out.success() {
@@ -253,5 +301,124 @@ impl System for RealSystem {
 
     fn prompt_password(&self, prompt: &str) -> Result<String> {
         rpassword::prompt_password(prompt).context("cannot read password")
+    }
+
+    fn path_kind(&self, path: &Path) -> PathKind {
+        match std::fs::metadata(path) {
+            Err(_) => PathKind::Missing,
+            Ok(m) if m.is_file() => PathKind::File,
+            Ok(m) if m.is_dir() => PathKind::Dir,
+            Ok(_) => PathKind::Other,
+        }
+    }
+
+    fn list_dir(&self, dir: &Path) -> Vec<String> {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return Vec::new();
+        };
+        let mut names: Vec<String> = entries
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    fn make_dir_all(&self, path: &Path) -> Result<()> {
+        std::fs::create_dir_all(path).with_context(|| format!("cannot create {}", path.display()))
+    }
+
+    fn write_user_file(&self, path: &Path, content: &str) -> Result<()> {
+        let dir = path
+            .parent()
+            .with_context(|| format!("{} has no parent directory", path.display()))?;
+        let mut tmp = tempfile::NamedTempFile::new_in(dir)
+            .with_context(|| format!("cannot create a temp file in {}", dir.display()))?;
+        tmp.write_all(content.as_bytes())
+            .with_context(|| format!("cannot write {}", path.display()))?;
+        tmp.persist(path)
+            .with_context(|| format!("cannot replace {}", path.display()))?;
+        Ok(())
+    }
+
+    fn rename(&self, from: &Path, to: &Path) -> Result<()> {
+        std::fs::rename(from, to)
+            .with_context(|| format!("cannot rename {} to {}", from.display(), to.display()))
+    }
+
+    fn copy_file(&self, from: &Path, to: &Path) -> Result<()> {
+        std::fs::copy(from, to)
+            .map(|_| ())
+            .with_context(|| format!("cannot copy {} to {}", from.display(), to.display()))
+    }
+
+    fn remove_user_file(&self, path: &Path) -> Result<()> {
+        match std::fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e).with_context(|| format!("cannot remove {}", path.display())),
+        }
+    }
+
+    fn remove_dir_all(&self, path: &Path) -> Result<()> {
+        std::fs::remove_dir_all(path).with_context(|| format!("cannot remove {}", path.display()))
+    }
+
+    fn http_status(&self, port: u16, path: &str, timeout: Duration) -> Option<u16> {
+        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+        let mut stream = TcpStream::connect_timeout(&addr, timeout).ok()?;
+        stream.set_read_timeout(Some(timeout)).ok()?;
+        stream.set_write_timeout(Some(timeout)).ok()?;
+        let request = format!("GET {path} HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        stream.write_all(request.as_bytes()).ok()?;
+        let mut buf = [0u8; 256];
+        let mut got = Vec::new();
+        while !got.contains(&b'\n') && got.len() < 4096 {
+            match stream.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => got.extend_from_slice(&buf[..n]),
+            }
+        }
+        parse_status_line(&got)
+    }
+
+    fn effective_uid(&self) -> u32 {
+        // /proc/self/status: `Uid: <real> <effective> <saved> <fs>`.
+        std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find(|l| l.starts_with("Uid:"))
+                    .and_then(|l| l.split_whitespace().nth(2))
+                    .and_then(|v| v.parse().ok())
+            })
+            .unwrap_or(u32::MAX)
+    }
+
+    fn home_dir(&self) -> Option<PathBuf> {
+        std::env::var_os("HOME")
+            .filter(|h| !h.is_empty())
+            .map(PathBuf::from)
+    }
+
+    fn sleep(&self, duration: Duration) {
+        std::thread::sleep(duration);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_line_parsing() {
+        assert_eq!(
+            parse_status_line(b"HTTP/1.1 200 OK\r\nServer: x\r\n"),
+            Some(200)
+        );
+        assert_eq!(parse_status_line(b"HTTP/1.0 404 Not Found\r\n"), Some(404));
+        assert_eq!(parse_status_line(b"HTTP/1.1 503\r\n"), Some(503));
+        assert_eq!(parse_status_line(b"SSH-2.0-OpenSSH\r\n"), None);
+        assert_eq!(parse_status_line(b""), None);
     }
 }

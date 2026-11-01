@@ -6,9 +6,13 @@
 //! or to find out, and its privilege notice names only those steps. When everything is
 //! already in place it prints `ok:` lines and never prompts.
 
+use std::fmt;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
 use anyhow::{Result, anyhow, bail};
 
-use super::{Cmd, Output, Root, System, sudo_preflight};
+use super::{Cmd, Output, PathKind, Root, System, sudo_preflight};
 use crate::ExitError;
 
 pub enum Check {
@@ -32,7 +36,30 @@ pub trait Step {
     fn rollback(&mut self, _sys: &dyn System) -> Result<()> {
         Ok(())
     }
+    /// An independent step (e.g. one restore): when it fails, report it, keep going with
+    /// the rest, and fail the action at the end without rolling anything back.
+    fn continue_on_failure(&self) -> bool {
+        false
+    }
 }
+
+/// Why [`run`] failed partway through its steps.
+#[derive(Debug)]
+pub struct StepFailure {
+    pub message: String,
+    /// Names of the steps that are in place (already done or changed by this run).
+    pub done: Vec<String>,
+    /// Names of the steps not reached because of the failure.
+    pub remaining: Vec<String>,
+}
+
+impl fmt::Display for StepFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for StepFailure {}
 
 pub enum GateResult {
     Pass,
@@ -120,37 +147,50 @@ pub fn run(sys: &dyn System, action: Action) -> Result<bool> {
     let changed = run_steps(sys, &mut steps)?;
     if changed && let Some(after) = after_change {
         (after.run)(sys)?;
-        println!("changed: {}", after.name);
+        crate::say!("changed: {}", after.name);
     }
     Ok(changed)
 }
 
 fn print_ok(name: &str, check: &Check) {
     match check {
-        Check::DoneWith(note) => println!("ok: {name} ({note})"),
-        _ => println!("ok: {name}"),
+        Check::DoneWith(note) => crate::say!("ok: {name} ({note})"),
+        _ => crate::say!("ok: {name}"),
     }
 }
 
-/// Check and apply each step in order, printing `ok:`/`changed:`. On the first failure,
-/// roll back the steps already applied (newest first) and return the error.
+/// Check and apply each step in order, printing `ok:`, or `adding:` then `changed:`. On the
+/// first failure of an ordinary step, roll back the steps already applied (newest first)
+/// and return the error. A failing step that continues on failure prints `error:` and the
+/// loop goes on; those failures are returned together at the end, nothing rolled back.
 fn run_steps(sys: &dyn System, steps: &mut [Box<dyn Step + '_>]) -> Result<bool> {
     let look = NoPrompt(sys);
     let mut applied: Vec<usize> = Vec::new();
+    let mut done: Vec<String> = Vec::new();
+    let mut tolerated: Vec<String> = Vec::new();
     for i in 0..steps.len() {
         let result = match steps[i].check(&look) {
             Ok(check @ (Check::Done | Check::DoneWith(_))) => {
                 print_ok(steps[i].name(), &check);
+                done.push(steps[i].name().to_string());
                 continue;
             }
-            Ok(Check::NeedsChange(_)) => steps[i].apply(sys),
+            Ok(Check::NeedsChange(_)) => {
+                crate::say!("adding: {}", steps[i].name());
+                steps[i].apply(sys)
+            }
             Ok(Check::Unknown) => Err(anyhow!("could not check it: sudo refused")),
             Err(e) => Err(e),
         };
         match result {
             Ok(()) => {
-                println!("changed: {}", steps[i].name());
+                crate::say!("changed: {}", steps[i].name());
                 applied.push(i);
+                done.push(steps[i].name().to_string());
+            }
+            Err(e) if steps[i].continue_on_failure() => {
+                crate::say!("error: {}: {e:#}", steps[i].name());
+                tolerated.push(steps[i].name().to_string());
             }
             Err(e) => {
                 for &j in applied.iter().rev() {
@@ -158,9 +198,27 @@ fn run_steps(sys: &dyn System, steps: &mut [Box<dyn Step + '_>]) -> Result<bool>
                         eprintln!("error: rolling back {}: {re:#}", steps[j].name());
                     }
                 }
-                return Err(anyhow!("{}: {e:#}", steps[i].name()));
+                return Err(StepFailure {
+                    message: format!("{}: {e:#}", steps[i].name()),
+                    done,
+                    remaining: steps[i..].iter().map(|s| s.name().to_string()).collect(),
+                }
+                .into());
             }
         }
+    }
+    if !tolerated.is_empty() {
+        let n = tolerated.len();
+        return Err(StepFailure {
+            message: format!(
+                "{n} step{} failed: {}",
+                if n == 1 { "" } else { "s" },
+                tolerated.join(", ")
+            ),
+            done,
+            remaining: tolerated,
+        }
+        .into());
     }
     Ok(!applied.is_empty())
 }
@@ -202,6 +260,54 @@ impl System for NoPrompt<'_> {
 
     fn prompt_password(&self, _prompt: &str) -> Result<String> {
         bail!("check tried to prompt for a password")
+    }
+
+    fn path_kind(&self, path: &Path) -> PathKind {
+        self.0.path_kind(path)
+    }
+
+    fn list_dir(&self, dir: &Path) -> Vec<String> {
+        self.0.list_dir(dir)
+    }
+
+    fn make_dir_all(&self, path: &Path) -> Result<()> {
+        bail!("check tried to create {}", path.display())
+    }
+
+    fn write_user_file(&self, path: &Path, _content: &str) -> Result<()> {
+        bail!("check tried to write {}", path.display())
+    }
+
+    fn rename(&self, from: &Path, _to: &Path) -> Result<()> {
+        bail!("check tried to rename {}", from.display())
+    }
+
+    fn copy_file(&self, _from: &Path, to: &Path) -> Result<()> {
+        bail!("check tried to write {}", to.display())
+    }
+
+    fn remove_user_file(&self, path: &Path) -> Result<()> {
+        bail!("check tried to remove {}", path.display())
+    }
+
+    fn remove_dir_all(&self, path: &Path) -> Result<()> {
+        bail!("check tried to remove {}", path.display())
+    }
+
+    fn http_status(&self, port: u16, path: &str, timeout: Duration) -> Option<u16> {
+        self.0.http_status(port, path, timeout)
+    }
+
+    fn effective_uid(&self) -> u32 {
+        self.0.effective_uid()
+    }
+
+    fn home_dir(&self) -> Option<PathBuf> {
+        self.0.home_dir()
+    }
+
+    fn sleep(&self, duration: Duration) {
+        self.0.sleep(duration)
     }
 }
 
@@ -324,6 +430,111 @@ mod tests {
         let steps: Vec<Box<dyn Step>> = vec![Fixed::new(|| Check::Unknown, true)];
         assert!(run(&sys, action(steps)).is_err());
         assert!(sys.prompted());
+    }
+
+    /// A named owner-level step: `fails` makes `apply` fail; `tolerant` continues on failure.
+    struct Named {
+        name: &'static str,
+        done: bool,
+        fails: bool,
+        tolerant: bool,
+    }
+
+    impl Named {
+        fn new(name: &'static str, done: bool, fails: bool, tolerant: bool) -> Box<Self> {
+            Box::new(Named {
+                name,
+                done,
+                fails,
+                tolerant,
+            })
+        }
+    }
+
+    impl Step for Named {
+        fn name(&self) -> &str {
+            self.name
+        }
+        fn check(&self, _sys: &dyn System) -> Result<Check> {
+            Ok(if self.done {
+                Check::Done
+            } else {
+                Check::NeedsChange("x".into())
+            })
+        }
+        fn notice(&self, _found: &Check) -> Option<String> {
+            None
+        }
+        fn apply(&mut self, sys: &dyn System) -> Result<()> {
+            sys.run(&Cmd::new("apply").args([self.name]))?;
+            if self.fails {
+                bail!("broke");
+            }
+            Ok(())
+        }
+        fn continue_on_failure(&self) -> bool {
+            self.tolerant
+        }
+    }
+
+    fn failure(err: &anyhow::Error) -> &StepFailure {
+        err.downcast_ref::<StepFailure>().expect("a StepFailure")
+    }
+
+    #[test]
+    fn tolerant_failures_are_collected_and_successes_kept() {
+        let sys = FakeSystem::new("me");
+        let steps: Vec<Box<dyn Step>> = vec![
+            Named::new("a", false, true, true),
+            Named::new("b", false, false, true),
+            Named::new("c", false, true, true),
+        ];
+        let err = run(&sys, action(steps)).unwrap_err();
+        let f = failure(&err);
+        assert_eq!(f.message, "2 steps failed: a, c");
+        assert_eq!(f.done, ["b"]);
+        assert_eq!(f.remaining, ["a", "c"]);
+        assert_eq!(sys.calls(), ["apply a", "apply b", "apply c"]);
+    }
+
+    #[test]
+    fn an_intolerant_failure_after_a_tolerant_one_stops_at_once() {
+        let sys = FakeSystem::new("me");
+        let steps: Vec<Box<dyn Step>> = vec![
+            Named::new("a", false, true, true),
+            Named::new("b", false, true, false),
+            Named::new("c", false, false, false),
+        ];
+        let err = run(&sys, action(steps)).unwrap_err();
+        let f = failure(&err);
+        assert_eq!(f.message, "b: broke");
+        assert_eq!(f.remaining, ["b", "c"]);
+        assert_eq!(sys.calls(), ["apply a", "apply b"]);
+    }
+
+    #[test]
+    fn done_steps_print_ok_and_changed_steps_print_adding_first() {
+        let sys = FakeSystem::new("me");
+        let steps: Vec<Box<dyn Step>> = vec![
+            Named::new("a", true, false, false),
+            Named::new("b", false, false, false),
+        ];
+        let (result, lines) = crate::output::capture(|| run(&sys, action(steps)));
+        assert!(result.unwrap());
+        assert_eq!(lines, ["ok: a", "adding: b", "changed: b"]);
+    }
+
+    #[test]
+    fn a_failed_step_reports_what_is_done_and_what_remains() {
+        let sys = FakeSystem::new("me");
+        let steps: Vec<Box<dyn Step>> = vec![
+            Named::new("a", true, false, false),
+            Named::new("b", false, true, false),
+            Named::new("c", false, false, false),
+        ];
+        let err = run(&sys, action(steps)).unwrap_err();
+        assert_eq!(failure(&err).done, ["a"]);
+        assert_eq!(failure(&err).remaining, ["b", "c"]);
     }
 
     #[test]
