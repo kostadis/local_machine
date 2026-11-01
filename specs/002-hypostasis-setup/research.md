@@ -190,19 +190,33 @@ Existing subcommand: `export` (`export.yaml`: `allowed_network`, `share_name`, `
   <backup_root>/palaces/<campaign>/<stamp>/   (mneme snapshot dirs)
   ```
 
-  Newest dated file wins; an undated file is used only when no dated one exists. The owner
-  points `backup_db.sh` (it takes a destination argument) and mneme's backups root
-  (authority `data_roots.backups`) at these folders, or overrides the two paths in config.
-  Setup only reads them.
+  Newest dated file wins; an undated file is used only when no dated one exists. Setup only
+  reads these folders; the owning tools write them:
+  - rpg-lib (since mytools#99 / PR #100): `backup_db.sh`, `setup_library_mcp.sh` and
+    `refresh_library.sh` use `$RPG_LIB_BACKUP_DIR`, with no built-in default. The owner sets it
+    in their shell profile to `<backup_root>/rpg-lib` (done on Linux-Alien, 2026-11-01:
+    `/mnt/g/My Drive/hypostasis/backups/rpg-lib`). **Decision (owner, 2026-11-01)**:
+    `local-machine hypostasis` does not set or check that variable. Only the hand-run backup
+    scripts read it, not the rpg-lib service, and setup gets the folder from its own config.
+    The quickstart notes that the two must name the same folder.
+  - mneme: palace snapshots go to its backups root (authority `data_roots.backups`); the
+    owner points it at `<backup_root>/palaces` or overrides `backups.palaces` in config.
 - **Library DB**: present = target file exists. Restore = copy to `<target>.partial`, run
   `sqlite3 <partial> 'PRAGMA quick_check'` → `ok`, then rename into place (atomic, no partial
   at target on failure, FR-010c). `user_data.db` restored alongside when in the backup (the
   server creates an empty one otherwise).
-- **FlexAI data**: present = data dir contains every expected workbook (names from the
-  backup dir listing at restore time; at status time, at least one `.xlsx` and none missing
-  vs the backup when reachable). Restore = copy into a temp dir next to the target, verify
-  each workbook opens with `openpyxl` in the services venv (the owning tool's reader),
-  then rename the temp dir to the target dir.
+- **FlexAI data** (analysis I2, owner decision 2026-11-01: ask the app; depends on
+  mytools#101): each app gains `<svenv>/bin/python <mytools>/<app>/app.py --data-dir <data_dir> --check`. It loads the workbooks through the app's own
+  startup path, exits 0 when usable, and otherwise exits non-zero with one line per problem:
+  `missing: <file>` or `unreadable: <file>: <reason>`. The workbook names stay constants in
+  the apps; `local-machine` never names them.
+  - Present = `--check` exits 0.
+  - Restore: for each `missing:` file, copy it from the backup folder to
+    `<data_dir>/<file>.partial` and rename it into place, never touching files already
+    there. Then run `--check` again (FR-010c). If it still fails, remove only the files this
+    restore added, and fail the piece with `--check`'s lines. An `unreadable:` file that
+    already exists is reported, never replaced (FR-010b).
+  - `start`'s readiness gate uses the same check.
 - **Palaces**: list = campaigns in the authority's `data_roots.campaigns`; present =
   mneme's store for that campaign exists (`mneme mp status <campaign>` reports a store).
   Restore = `<venv>/bin/mneme mp restore <campaign> --from <newest snapshot>` **only when
@@ -274,8 +288,13 @@ Only three things need root, all in `setup`: `apt-get install` (missing packages
 `loginctl enable-linger`, and the ufw rules. They are steps of one `action::run` call with a
 gate (config valid, not root, invoking user is the owner) so a fully set-up machine never
 prompts and the password is asked at most once (SC-001). Every other setup piece is an
-owner-level step that runs after the runner's root steps. `start`, `stop`, `status` need no
-root. Tests assert order with `FakeSystem::prompted()`.
+owner-level step. All three root steps are ordered before the slow owner-level steps
+(venv, `hypostasis install`, npm build, restores), so they run while sudo's cached
+credentials are still valid. The firewall steps go right after the `authority` step, the
+first point at which rpg-lib's port is known (analysis I1, owner decision 2026-11-01). Only
+the clones run between the prompt and the firewall steps; if they ever take longer than
+sudo's 15-minute cache, sudo would prompt again — accepted. `start`, `stop`, `status` need
+no root. Tests assert order with `FakeSystem::prompted()`.
 
 - **Runner fit**: the existing runner asks once for all root steps, then applies steps in
   order. Owner-level steps implement the same `Step` trait with `notice() -> None`, so they

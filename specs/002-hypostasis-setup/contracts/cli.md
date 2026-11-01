@@ -16,7 +16,8 @@ local-machine [--config-dir DIR] hypostasis <action>
 ## Common behaviour
 
 - Output on stdout, one line per piece or service: `ok: <name>`, `ok: <name> (<note>)`,
-  `changed: <name>`, `error: <name>: <reason>`. Status adds `missing:`, `unknown:`,
+  `adding: <name>` (printed before a piece is put in place), then `changed: <name>` or
+  `error: <name>: <reason>`. Status adds `missing:`, `unknown:`,
   `note:`. Errors on stderr are prefixed `error:`.
 - Every action first validates config, the owner (invoking user = `machine.yaml` owner, not
   root), and readability of what it needs. Failure → exit 3 naming the file/key, before any

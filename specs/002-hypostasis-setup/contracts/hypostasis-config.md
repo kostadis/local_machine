@@ -36,6 +36,8 @@ checkouts:
     sparse: [obelisk, gm-assistant, scripts, tools, .claude]
   # ~/phandalin, ~/out-of-the-abyss, ~/toee likewise
 
+hypostasis_source: ~/src/mneme  # where hypostasis lives; must be one of the checkout paths
+
 services:
   venv: ~/.venvs/services
   mytools: ~/src/mytools        # must be one of the checkout paths
@@ -56,12 +58,13 @@ flexai_combat:
 
 - Unknown key; `allowed_network`/`owner` present (→ "moved to machine.yaml"); any authority
   key (`venv`, `rpg_lib`, `rpg_library_db`, …) present (→ "lives in <authority>").
-- `authority_source`, `backup_root`, `checkouts`, `services.venv`, `services.mytools`,
+- `authority_source`, `backup_root`, `checkouts`, `hypostasis_source`, `services.venv`,
+  `services.mytools`,
   `flexai_social`, `flexai_combat` required.
 - Paths: `~` expands to the owner's home; must be absolute afterwards.
 - Checkouts: unique `path`s, none nested in another; `repo` non-empty; `branch` non-empty;
   `sparse` non-empty list of plain names when present.
-- `services.mytools` equals a checkout `path`.
+- `services.mytools` and `hypostasis_source` each equal a checkout `path`.
 - `backups` keys limited to `rpg_library`, `flexai_social`, `flexai_combat`, `palaces`.
 - Ports 1–65535, distinct from each other and from the authority's rpg-lib port (checked
   once the authority is readable).

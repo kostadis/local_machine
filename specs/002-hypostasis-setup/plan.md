@@ -9,19 +9,19 @@
 Add the `hypostasis` subcommand (`setup` / `start` / `status` / `stop`).
 
 - **`setup`** brings a fresh Ubuntu machine to the point where `mneme up` works. In order:
-  1. apt prerequisites and `uv`;
+  1. apt prerequisites, `uv`, and linger;
   2. git checkouts and sparse campaign trees (created only when missing, never touched
      afterwards);
   3. seeds hypostasis's authority file from the owner's copy;
-  4. creates the venv the authority names and installs hypostasis into it;
-  5. runs `hypostasis install`;
-  6. installs the three local services (rpg-lib, flexai-social, flexai-combat) into their
-     own venv, with systemd **user** units and linger;
-  7. opens their ports to the home network in ufw;
-  8. restores the library DB, the FlexAI workbooks and the palaces from a backup
-     folders under a backup root on the Google Drive mount. Each restore runs only when
-   the item is missing, and palaces go through
-     `mneme mp restore`.
+  4. opens the three services' ports to the home network in ufw — the last root step,
+     placed before the slow steps so sudo's cached credentials are still valid (analysis I1);
+  5. creates the venv the authority names and installs hypostasis into it;
+  6. runs `hypostasis install`;
+  7. installs the three local services (rpg-lib, flexai-social, flexai-combat) into their
+     own venv, with systemd **user** units;
+  8. restores the library DB, the FlexAI workbooks and the palaces from folders under a
+     backup root on the Google Drive mount. Each restore runs only when the item is
+     missing, and palaces go through `mneme mp restore`.
 - **`start` / `stop`** enable or disable the user units and wait until each service answers
   (or stops answering) over HTTP.
 - **`status`** reports what is observed and never prompts.
@@ -60,8 +60,9 @@ II).
 **Project Type**: CLI (single binary `local-machine`).
 
 **Performance Goals**:
-- Setup re-run on a set-up machine finishes in under 1 min (SC-002). Checks only, with no
-  network except the HTTP probes of local services.
+- No time target (SC-002's time bound was dropped, analysis G2). A setup re-run on a
+  set-up machine only runs checks, with no network except the HTTP probes of local
+  services.
 - `start` waits up to 30 s per service; `stop` up to 15 s.
 
 **Constraints**:
@@ -82,7 +83,7 @@ II).
 | Principle | Status | Evidence |
 |---|---|---|
 | I. Single entry point, grammar | ✅ | `local-machine hypostasis <setup\|start\|status\|stop>`; shared verbs; `setup` is the only action that installs |
-| II. Config not hardcoding; per-subcommand file; sharing review | ✅ | `hypostasis.yaml`; sharing review in research R3 → `machine.yaml` created, `export` refactored in this feature, Principle II amended (PATCH) on this branch to record the file name and schema; authority values not duplicated (FR-022, R2) |
+| II. Config not hardcoding; per-subcommand file; sharing review | ✅ | `hypostasis.yaml`; sharing review in research R3 → `machine.yaml` created, `export` refactored in this feature, Principle II amended to 1.4.1 (PATCH) on this branch to record the file name and schema, and to allow reading — never writing — another tool's own config at a path named in our config (analysis D1); authority values not duplicated (FR-022, R2) |
 | III. Shared parameter names | ✅ | only `--config-dir`; config keys `allowed_network`/`owner` keep `export`'s names |
 | IV. Rust | ✅ | all logic in Rust; external programs invoked from Rust (hypostasis/mneme/uv/git/systemctl); no shell scripts |
 | V. Ubuntu | ✅ | apt, systemd user units, ufw, loginctl |

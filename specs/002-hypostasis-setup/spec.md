@@ -245,8 +245,13 @@ non-zero, and nothing on the machine changes.
   and exits non-zero. A later re-run restores only what is still missing.
 - **The authority file exists but differs from the owner-kept source**: setup leaves it
   alone. Hypostasis's file on the machine is the authority; setup only seeds it once.
-- **rpg-lib's declared address changes in the authority file**: the next `start` (and
-  `status`) use the new address. That address is never copied into this subcommand's config.
+- **rpg-lib's declared address changes in the authority file**: its host may be any name
+  or address of this machine (`localhost`, the hostname, or the home-network address, so
+  the same URL is right when viewed from other machines). After a port change, the next
+  `setup` updates the unit and the firewall rule, and `start`/`status` use the new port. A
+  host that is another machine, or a URL whose port disagrees with the declared port, is a
+  configuration error: every action refuses and names it. The address is never copied
+  into this subcommand's config.
 - **A service's port is already in use by something else**: start doesn't start that
   service, names the port and what holds it if it can see that, and doesn't stop the other
   process.
@@ -440,8 +445,9 @@ non-zero, and nothing on the machine changes.
   campaign can be started with `mneme up` and both FlexAI tools open in a browser" with two
   commands (`setup`, `start`) and no manual steps other than entering the administrator
   password at most once.
-- **SC-002**: Re-running setup on a fully set-up machine changes nothing, asks for no
-  password, and finishes in under 1 minute when the network is not needed.
+- **SC-002**: Re-running setup on a fully set-up machine changes nothing and asks for no
+  password. (The earlier "under 1 minute" target was dropped by the owner, analysis G2,
+  2026-11-01.)
 - **SC-003**: Across repeated runs, 0 existing source checkouts lose uncommitted changes,
   local branches, or unpushed commits.
 - **SC-004**: After an interrupted run, a single re-run completes setup without the owner
