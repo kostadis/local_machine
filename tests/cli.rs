@@ -41,7 +41,7 @@ fn config_dir_is_accepted_before_and_after_the_subcommand() {
 #[test]
 fn every_action_without_config_exits_3_naming_the_file() {
     let dir = tempfile::tempdir().unwrap();
-    let expected = format!("no config at {}/export.yaml", dir.path().display());
+    let expected = format!("no config at {}/machine.yaml", dir.path().display());
     for action in ["setup", "start", "status", "stop"] {
         bin()
             .args(["export", action, "--config-dir"])
@@ -56,7 +56,7 @@ fn every_action_without_config_exits_3_naming_the_file() {
 fn default_config_dir_is_under_home() {
     let home = tempfile::tempdir().unwrap();
     let expected = format!(
-        "no config at {}/.config/local-machine/export.yaml",
+        "no config at {}/.config/local-machine/machine.yaml",
         home.path().display()
     );
     bin()

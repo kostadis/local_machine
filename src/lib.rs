@@ -3,6 +3,8 @@
 pub mod cli;
 pub mod config;
 pub mod export;
+pub mod machine;
+pub mod output;
 pub mod system;
 
 use std::fmt;
@@ -51,7 +53,11 @@ pub fn run(cli: &Cli, sys: &dyn System) -> anyhow::Result<u8> {
 pub fn exit_code(err: &anyhow::Error) -> u8 {
     if let Some(e) = err.downcast_ref::<ExitError>() {
         e.code
-    } else if err.downcast_ref::<config::ConfigError>().is_some() {
+    } else if err.downcast_ref::<config::ConfigError>().is_some()
+        || err
+            .chain()
+            .any(|e| e.downcast_ref::<config::ConfigError>().is_some())
+    {
         ExitError::NOT_CONFIGURED
     } else {
         ExitError::FAILED

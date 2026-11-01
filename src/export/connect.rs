@@ -2,31 +2,14 @@
 
 use std::net::IpAddr;
 
-use crate::system::{Cmd, System};
+use crate::system::System;
+use crate::system::net;
 
 use super::config::ExportConfig;
 
 /// The first local address inside `allowed_network`, parsed from `ip -o addr show`.
 pub fn local_address(cfg: &ExportConfig, sys: &dyn System) -> Option<IpAddr> {
-    let out = sys.run(&Cmd::new("ip").args(["-o", "addr", "show"])).ok()?;
-    parse_addresses(&out.stdout)
-        .into_iter()
-        .find(|a| cfg.allowed_network.contains(a))
-}
-
-pub fn parse_addresses(stdout: &str) -> Vec<IpAddr> {
-    let mut addrs = Vec::new();
-    for line in stdout.lines() {
-        let tokens: Vec<&str> = line.split_whitespace().collect();
-        if let Some(pos) = tokens.iter().position(|t| *t == "inet" || *t == "inet6")
-            && let Some(cidr) = tokens.get(pos + 1)
-            && let Some(addr) = cidr.split('/').next()
-            && let Ok(ip) = addr.parse()
-        {
-            addrs.push(ip);
-        }
-    }
-    addrs
+    net::local_address(&cfg.allowed_network, sys)
 }
 
 pub fn windows_path(cfg: &ExportConfig, addr: IpAddr) -> String {
@@ -60,6 +43,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    use crate::system::net::parse_addresses;
 
     #[test]
     fn parses_ip_output_and_formats_paths() {

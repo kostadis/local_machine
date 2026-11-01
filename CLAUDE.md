@@ -8,6 +8,8 @@ Configuration is stored in ~/.config/local-machine by default. The location is a
 
 Config is isolated by default: each sub-command has its own file, `<config-dir>/<subcommand>.yaml`. When planning a new sub-command, research compares its config with the existing sub-commands'. Values that would add value by being shared (same meaning, e.g. the home network) move to a shared file, and every sub-command using them is refactored to read it from there.
 
+The shared file is `<config-dir>/machine.yaml`: `allowed_network` (required) and `owner` (optional, never root). A sub-command may read, but never write, another tool's own config file at a path named in its own config, for values that tool owns; those values are never copied into local-machine config.
+
 The tools will assume an ubuntu linux system. 
 
 There will be a local repo
