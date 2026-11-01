@@ -369,7 +369,72 @@ fn occupied_paths_are_never_touched() {
                 "touched {p}: {c}"
             );
         }
+        // A fresh machine has root work pending, but the refusal comes first (FR-014).
+        assert!(!m.sys.prompted(), "{found}: {lines:#?}");
+        assert!(
+            m.mutating_calls().is_empty(),
+            "{found}: {:#?}",
+            m.mutating_calls()
+        );
+        assert!(
+            !lines.iter().any(|l| l.starts_with("needs administrator")),
+            "{lines:#?}"
+        );
     }
+}
+
+#[test]
+fn every_occupied_path_is_named_in_one_refusal() {
+    let m = Machine::fresh();
+    for p in [
+        "/home/kostadis/src/turbovecdb",
+        "/home/kostadis/src/mytools",
+    ] {
+        m.sys.set_file(p, "x");
+    }
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Err(1), "{lines:#?}");
+    assert!(
+        lines.iter().any(|l| l
+            == "error: checkout /home/kostadis/src/turbovecdb: occupied (a file); not touched\n\
+                error: checkout /home/kostadis/src/mytools: occupied (a file); not touched"),
+        "{lines:#?}"
+    );
+    assert!(!m.sys.prompted());
+}
+
+#[test]
+fn ufw_switched_off_is_known_without_root() {
+    let m = Machine::set_up();
+    m.sys
+        .set_file("/etc/ufw/ufw.conf", "# comment\nENABLED=no\nLOGLEVEL=low\n");
+    m.sys.respond_fn("sudo -n ufw status", |_, _| {
+        Output::fail(1, "a password is required")
+    });
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Ok(0), "{lines:#?}");
+    assert!(!m.sys.prompted(), "{lines:#?}");
+    assert!(has_line(
+        &lines,
+        "ok: firewall rpg-lib (ufw inactive; services reachable from any network)"
+    ));
+}
+
+#[test]
+fn active_ufw_without_cached_sudo_asks_to_verify() {
+    // Its rules are root-only, so finding out is root work (constitution VI, SC-002).
+    let m = Machine::set_up();
+    m.sys.set_file("/etc/ufw/ufw.conf", "ENABLED=yes\n");
+    m.sys.respond_fn("sudo -n ufw status", |_, _| {
+        Output::fail(1, "a password is required")
+    });
+    let (_, lines) = setup(&m);
+    assert!(m.sys.prompted(), "{lines:#?}");
+    let notice = position(&lines, |l| l == "needs administrator privileges for:");
+    assert_eq!(
+        lines[notice + 1],
+        "  check ufw; allow port 8000/tcp from 192.168.1.0/24 (rpg-lib) if ufw is active"
+    );
 }
 
 #[test]

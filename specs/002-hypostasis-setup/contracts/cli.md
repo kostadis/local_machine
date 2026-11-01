@@ -44,7 +44,9 @@ local-machine [--config-dir DIR] hypostasis <action>
 - Puts each missing piece in place in data-model order; reports each `ok:`/`changed:`.
 - Software pieces: stop at the first failure — `error: <piece>: <reason>`, then
   `done: <n> pieces` / `remaining: <names>`, exit 1 (FR-016).
-- Occupied checkout path: `error: checkout <path>: occupied (<found>); not touched`, exit 1.
+- Occupied checkout path: a precondition failure (FR-013, FR-014). Checked before anything
+  else; every occupied path gets `error: checkout <path>: occupied (<found>); not touched`;
+  exit 1 with no notice, no prompt and no piece changed.
 - Restores: each missing one is attempted; failures listed at the end, exit 1.
 - Never starts, stops or restarts a service (FR-009); rewriting a unit file of a running
   service does not restart it (status shows `note: unit changed; run stop then start`).

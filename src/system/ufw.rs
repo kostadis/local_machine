@@ -1,5 +1,19 @@
 //! Parsing `ufw status`, shared by every subcommand that opens the firewall.
 
+use std::path::Path;
+
+use super::System;
+
+/// ufw's own settings file; unlike its rules, it is world-readable.
+pub const CONF: &str = "/etc/ufw/ufw.conf";
+
+/// Whether ufw is switched off (`ENABLED=no`), which needs no root to find out. `false`
+/// when the file is missing or says anything else: then only `ufw status` can tell.
+pub fn off_by_conf(sys: &dyn System) -> bool {
+    sys.read_file(Path::new(CONF))
+        .is_some_and(|text| text.lines().any(|l| l.trim() == "ENABLED=no"))
+}
+
 /// One rule line of `ufw status`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UfwRule {

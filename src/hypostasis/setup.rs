@@ -4,13 +4,14 @@
 
 use anyhow::{Result, anyhow};
 
+use crate::ExitError;
 use crate::say;
 use crate::system::System;
-use crate::system::action::{self, Action, Step, StepFailure};
+use crate::system::action::{self, Action, Gate, GateResult, Step, StepFailure};
 
 use super::Context;
 use super::authority::Authority;
-use super::checkout::CheckoutStep;
+use super::checkout::{self, CheckoutStep, Found};
 use super::firewall::FirewallStep;
 use super::pieces::{
     AuthorityFile, ComponentPaths, Components, Hypostasis, Install, Linger, Packages, ServicesVenv,
@@ -64,11 +65,43 @@ pub fn restore_steps<'a>(
     steps
 }
 
+/// A checkout path occupied by something else is a precondition failure (FR-013, FR-014):
+/// refuse before any notice or prompt, and before any other piece changes.
+struct NoOccupiedCheckouts<'a> {
+    ctx: &'a Context,
+}
+
+impl Gate for NoOccupiedCheckouts<'_> {
+    fn check(&self, sys: &dyn System) -> GateResult {
+        let occupied: Vec<String> = self
+            .ctx
+            .cfg
+            .checkouts
+            .iter()
+            .filter_map(|co| match checkout::inspect(sys, co) {
+                Found::Occupied(found) => Some(format!(
+                    "checkout {}: occupied ({found}); not touched",
+                    co.path.display()
+                )),
+                _ => None,
+            })
+            .collect();
+        if occupied.is_empty() {
+            GateResult::Pass
+        } else {
+            GateResult::Refuse(ExitError::new(
+                ExitError::FAILED,
+                occupied.join("\nerror: "),
+            ))
+        }
+    }
+}
+
 pub fn run(ctx: &Context, sys: &dyn System) -> Result<u8> {
     let software = action::run(
         sys,
         Action {
-            gate: None,
+            gate: Some(Box::new(NoOccupiedCheckouts { ctx })),
             steps: software_steps(ctx),
             after_change: None,
         },

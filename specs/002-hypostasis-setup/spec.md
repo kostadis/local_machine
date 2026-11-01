@@ -359,7 +359,9 @@ non-zero, and nothing on the machine changes.
 
 - **FR-011**: Setup MUST be idempotent. With unchanged configuration on a fully set-up
   machine it MUST change nothing, report every piece as already in place, and not ask for a
-  password.
+  password, except to verify a piece only root can read: an active firewall's rules when
+  sudo's credentials are not cached (constitution VI, "to find out"). A firewall switched
+  off in `/etc/ufw/ufw.conf` needs no root to know.
 - **FR-012**: Setup MUST NOT modify an existing source checkout: no branch switch, pull,
   reset, clean, or overwrite of local changes or commits.
 - **FR-013**: Setup MUST refuse a piece whose target location is occupied by something
@@ -446,7 +448,8 @@ non-zero, and nothing on the machine changes.
   commands (`setup`, `start`) and no manual steps other than entering the administrator
   password at most once.
 - **SC-002**: Re-running setup on a fully set-up machine changes nothing and asks for no
-  password. (The earlier "under 1 minute" target was dropped by the owner, analysis G2,
+  password while sudo's credentials are cached or ufw is off; otherwise at most one prompt,
+  whose notice names only the firewall check (owner decision, 2026-11-01). (The earlier "under 1 minute" target was dropped by the owner, analysis G2,
   2026-11-01.)
 - **SC-003**: Across repeated runs, 0 existing source checkouts lose uncommitted changes,
   local branches, or unpushed commits.
