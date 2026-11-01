@@ -1,5 +1,7 @@
 # Quickstart & Validation: `local-machine export`
 
+> Updated 2026-11-01 by 002: shared values moved to `machine.yaml`.
+
 Run on the Ubuntu machine unless marked **[Windows]** or **[Unix VM]**. Commands, outputs
 and exit codes: [contracts/cli.md](contracts/cli.md). Config: [contracts/export-config.md](contracts/export-config.md).
 
@@ -7,7 +9,8 @@ and exit codes: [contracts/cli.md](contracts/cli.md). Config: [contracts/export-
 
 - `local-machine` built and on `PATH` (`cargo install --path .`).
 - Owner can `sudo`.
-- `~/.config/local-machine/export.yaml` with at least `allowed_network` set to the home LAN.
+- `~/.config/local-machine/machine.yaml` with at least `allowed_network` set to the home
+  LAN. `export.yaml` is optional (`share_name`, `path`, `exclude`).
 - A Windows 10/11 desktop and one Linux VM on that network; the VM has `cifs-utils`.
 
 ## Validation scenarios
@@ -25,11 +28,11 @@ and exit codes: [contracts/cli.md](contracts/cli.md). Config: [contracts/export-
 | V9 | Connect with a wrong password; connect from a host outside `allowed_network` (e.g. over Tailscale) | Both refused; no guest access | FR-015, FR-016, SC-004 |
 | V10 | Reboot Ubuntu; `export status`; reconnect from Windows | Available with no action | FR-006, SC-005 |
 | V11 | `local-machine export stop` twice; `export status` | Second run says nothing was shared; status `set up, not available`, exit 5; Windows and VM cannot connect; still off after reboot | US4, FR-008, SC-005 |
-| V12 | Remove `allowed_network` from config; run each action | Each stops with exit 3 naming the key and file | Edge case (config) |
+| V12 | Remove `allowed_network` from `machine.yaml`; run each action | Each stops with exit 3 naming the key and file | Edge case (config) |
 | V13 | `grep -ri password ~/.config/local-machine` | No match | FR-015 |
 | V14 | Time V3→V5 on a fresh machine | Under 5 minutes | SC-001 |
 | V15 | **[Windows]** Open and save a ~500 KB note | Under 1 second | SC-003 |
-| V16 | With the share available, change `allowed_network` in `export.yaml`; run `export start`; `export status`; then `export setup`, `export start` | `start` exits 4 and `status` warns "configuration changed — run 'local-machine export setup'"; after setup + start the share is available, old firewall rule gone (`sudo ufw status`) | Edge case (config change), FR-016 |
+| V16 | With the share available, change `allowed_network` in `machine.yaml`; run `export start`; `export status`; then `export setup`, `export start` | `start` exits 4 and `status` warns "configuration changed — run 'local-machine export setup'"; after setup + start the share is available, old firewall rule gone (`sudo ufw status`) | Edge case (config change), FR-016 |
 | V17 | On Ubuntu `touch ~/'a:b?.txt'`; **[Windows]** browse that folder; on Ubuntu `ls -l ~/'a:b?.txt'` | Windows shows a mangled name or hides it; the Ubuntu file is unchanged | Edge case (file names) |
 | V18 | `sudo testparm -s 2>/dev/null \| sed -n '/^\[global\]/,/^\[/p'`; then `testparm -s --parameter-name="map to guest"` | `[global]` shows `server min protocol = SMB3`, `restrict anonymous = 2`, `hosts allow = <allowed_network> 127.0.0.1`, `hosts deny = ALL`; `map to guest` prints `Never` (a default, so the first command hides it). Ubuntu's `[printers]` and `[print$]` shares remain (accepted, research R5) | FR-015, FR-016 (globals applied) |
 

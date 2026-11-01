@@ -1,5 +1,7 @@
 # CLI Contract: `local-machine export`
 
+> Updated 2026-11-01 by 002: shared values moved to `machine.yaml`.
+
 ## Grammar
 
 ```text
@@ -10,7 +12,10 @@ local-machine export <action> [--config-dir DIR]
 ```
 
 - `--config-dir DIR` is a global parameter shared by every subcommand (constitution
-  Principle II/III). Default `~/.config/local-machine`. `export` reads `DIR/export.yaml`.
+  Principle II/III). Default `~/.config/local-machine`. `export` reads `DIR/machine.yaml` (shared:
+  `allowed_network`, `owner`) and `DIR/export.yaml` (optional: `share_name`, `path`,
+  `exclude`). Exit 3 messages name the file: `no config at DIR/machine.yaml (need at least
+  allowed_network)`, or `DIR/export.yaml: allowed_network: moved to DIR/machine.yaml`.
 - `export` with no action prints help listing the four actions and exits 2.
 - No other parameters. Any future parameter shared with another subcommand MUST reuse that
   subcommand's name.
@@ -21,7 +26,8 @@ local-machine export <action> [--config-dir DIR]
 - `setup`, `start`, and `stop` begin — before any check — by printing
   `needs administrator privileges for:` followed by the privileged steps they may take,
   then call `sudo -v` once (FR-009). `status` never does this and never prompts.
-- Each change is printed as `changed: <step>`; each already-correct step as `ok: <step>`.
+- Each change is printed as `adding: <step>` before it is made, then `changed: <step>`;
+  each already-correct step as `ok: <step>` (since 002).
 - A failing step prints `error: <step>: <reason>` and the action exits non-zero, having
   restored any file it replaced.
 

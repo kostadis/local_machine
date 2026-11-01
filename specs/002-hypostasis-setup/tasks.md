@@ -38,11 +38,11 @@ Real-machine behaviour is checked by hand with quickstart.md V1–V18.
 
 **Purpose**: Skeleton for the new subcommand.
 
-- [ ] T001 Create the module skeleton from plan.md → Source Code as empty, compiling
+- [X] T001 Create the module skeleton from plan.md → Source Code as empty, compiling
   modules. New files: `src/machine.rs` and
   `src/hypostasis/{mod.rs,config.rs,authority.rs,pieces.rs,checkout.rs,restore.rs,services.rs,firewall.rs,setup.rs,start.rs,stop.rs,status.rs}`.
   Declare them in `src/lib.rs`. `cargo build` must pass.
-- [ ] T002 Add the `hypostasis` subcommand to the clap tree in `src/cli.rs`, with the
+- [X] T002 Add the `hypostasis` subcommand to the clap tree in `src/cli.rs`, with the
   required actions `setup|start|status|stop` (contracts/cli.md → Grammar). Each action
   dispatches to a stub in `src/hypostasis/mod.rs` that returns exit 1 "not implemented".
   `local-machine hypostasis` with no action prints help and exits 2. Add a test to
@@ -60,7 +60,7 @@ readers that every action needs.
 
 ### Shared config (`machine.yaml`) and the `export` refactor (research R3)
 
-- [ ] T003 Implement `MachineConfig` in `src/machine.rs` per contracts/machine-config.md.
+- [X] T003 Implement `MachineConfig` in `src/machine.rs` per contracts/machine-config.md.
   - `load(config_dir, sys) -> Result<MachineConfig, ConfigError>` reads
     `<config_dir>/machine.yaml`.
   - `allowed_network` is required: a CIDR, truncated to its network.
@@ -72,7 +72,7 @@ readers that every action needs.
     both subcommands use them.
   - Unit tests: minimal file, owner set, owner `root`, unknown owner, bad CIDR, unknown key,
     missing file.
-- [ ] T004 Refactor `src/export/config.rs` to take `allowed_network` and `owner` from
+- [X] T004 Refactor `src/export/config.rs` to take `allowed_network` and `owner` from
   `MachineConfig`.
   - `KEYS` becomes `share_name`, `path`, `exclude`.
   - `allowed_network` or `owner` in `export.yaml` is a `ConfigError::InvalidKey` with the
@@ -90,12 +90,12 @@ readers that every action needs.
     dated note at the top of each changed file: "Updated 2026-11-01 by 002: shared values
     moved to `machine.yaml`".
   - Depends on T003.
-- [ ] T005 Update the `export` integration tests (`tests/export_*.rs`, `tests/cli.rs`) so
+- [X] T005 Update the `export` integration tests (`tests/export_*.rs`, `tests/cli.rs`) so
   their temp config dirs write `machine.yaml` with `allowed_network`, and expect the new
   `adding: <step>` lines from T008 wherever they match exact output. Add one test where
   `export.yaml` still holds `allowed_network` → exit 3 naming `machine.yaml`. The whole
   suite (48 tests) must still pass. Depends on T004.
-- [ ] T006 Amend the constitution in `.specify/memory/constitution.md`, Principle II
+- [X] T006 Amend the constitution in `.specify/memory/constitution.md`, Principle II
   (owner decisions D1 and R3, 2026-11-01):
   - Record the shared file `machine.yaml` and its schema (`allowed_network` required,
     `owner` optional, never root).
@@ -111,7 +111,7 @@ readers that every action needs.
 
 ### System and runner extensions
 
-- [ ] T007 [P] Extend the `System` trait in `src/system/mod.rs` with owner-level
+- [X] T007 [P] Extend the `System` trait in `src/system/mod.rs` with owner-level
   operations, all of which run without root:
   - `path_kind(&Path) -> PathKind {Missing, File, Dir, Other}`
   - `make_dir_all(&Path)`
@@ -130,7 +130,7 @@ readers that every action needs.
   sequence of answers per port so wait loops can be tested, and `set_euid`. Record every
   mutating call in `calls`. Add unit tests for the HTTP status-line parser, using canned
   bytes.
-- [ ] T008 [P] Add per-step failure tolerance to the runner in `src/system/action.rs`
+- [X] T008 [P] Add per-step failure tolerance to the runner in `src/system/action.rs`
   (research R13).
   - `Step` gains `fn continue_on_failure(&self) -> bool { false }`.
   - In `run_steps`, a failing step that returns true prints `error: <name>: <reason>`, is
@@ -145,7 +145,7 @@ readers that every action needs.
     already done still print only `ok:`. This applies to every action, `export` included.
     Unit test: the output order for one done step and one changed step is `ok: a`,
     `adding: b`, `changed: b`.
-- [ ] T009 [P] Move the ufw parsing out of `src/export/state.rs` into a shared module,
+- [X] T009 [P] Move the ufw parsing out of `src/export/state.rs` into a shared module,
   `src/system/ufw.rs`.
   - `parse_status(stdout) -> Option<Vec<UfwRule>>` returns `None` when inactive, where
     `UfwRule { to: String, from: String, comment: Option<String> }` covers both app rules
@@ -155,7 +155,7 @@ readers that every action needs.
 
 ### hypostasis config and authority readers
 
-- [ ] T010 [P] Implement `HypostasisConfig` in `src/hypostasis/config.rs` per
+- [X] T010 [P] Implement `HypostasisConfig` in `src/hypostasis/config.rs` per
   contracts/hypostasis-config.md and data-model.md → HypostasisConfig, Checkout,
   FlexAIService.
   - Keys and nesting are as in the contract, and `~` expands to the owner's home.
@@ -169,7 +169,7 @@ readers that every action needs.
     checkout path, and so must `hypostasis_source` (analysis U1); distinct ports; the `env` key allow-list; `password`/`token` keys
     forbidden.
   - Unit tests: one per validation rule, plus a full valid example (the contract's).
-- [ ] T011 [P] Implement the read-only authority view in `src/hypostasis/authority.rs` per
+- [X] T011 [P] Implement the read-only authority view in `src/hypostasis/authority.rs` per
   data-model.md → Authority.
   - `load(path) -> Result<Authority, AuthorityError>` reads only `venv`, `installer`,
     `services.rpg_lib.{url,port,health.path}` (health path defaults to `/`),
@@ -186,7 +186,7 @@ readers that every action needs.
   - Never writes.
   - Unit tests use a copy of this machine's authority file as a fixture in
     `tests/fixtures/authority.yaml` (with the `mneme.id` value replaced by a placeholder).
-- [ ] T012 Implement the owner gate in `src/hypostasis/mod.rs`, shared by all four actions.
+- [X] T012 Implement the owner gate in `src/hypostasis/mod.rs`, shared by all four actions.
   - Load `MachineConfig` and `HypostasisConfig`.
   - Refuse with exit 3 when `effective_uid() == 0` (`must not run as root`) or when the
     invoking user differs from `owner`.
@@ -196,7 +196,7 @@ readers that every action needs.
     a missing `machine.yaml`, a missing `hypostasis.yaml`, root, and the wrong user, and
     none of them calls `sudo`.
   - Depends on T003, T010.
-- [ ] T013 Implement the local-service table in `src/hypostasis/services.rs` per
+- [X] T013 Implement the local-service table in `src/hypostasis/services.rs` per
   data-model.md → LocalService and research R6.
   - `LocalService {name, port, health_path, unit_name, log_path, app}` for rpg-lib (port
     and path from the authority) and the two FlexAI services (from config).
@@ -233,19 +233,19 @@ data-model.md → SetupPiece. `check()` follows the "Present when" column and re
 returns `Some` only for root steps. `rollback()` keeps the default no-op, so completed
 pieces survive a later failure.
 
-- [ ] T014 [P] [US1] `packages` step.
+- [X] T014 [P] [US1] `packages` step.
   - Check: `dpkg-query -W -f='${Status}' <pkg>` for each package in `prerequisites.apt`,
     counting `node`/`npm` as present when the commands resolve (research R5).
   - Notice: `install packages: <missing…>`.
   - Apply: `sudo apt-get install -y <missing…>`.
-- [ ] T015 [P] [US1] `uv` step.
+- [X] T015 [P] [US1] `uv` step.
   - Check: `uv` on `PATH` or at `~/.local/bin/uv`.
   - Apply: `pipx install uv`, as the owner, with no notice.
-- [ ] T016 [P] [US1] `linger` step.
+- [X] T016 [P] [US1] `linger` step.
   - Check: `loginctl show-user <owner> -p Linger` → `Linger=yes`.
   - Notice: `enable linger for <owner>`.
   - Apply: `sudo loginctl enable-linger <owner>`.
-- [ ] T017 [US1] Checkouts in `src/hypostasis/checkout.rs`, per research R4.
+- [X] T017 [US1] Checkouts in `src/hypostasis/checkout.rs`, per research R4.
   - `normalize_remote(url)`: drop a trailing `.git` and `/`; treat `git@github.com:x` the
     same as `https://github.com/x`.
   - `inspect(sys, checkout) -> {Present, Missing, Occupied(found)}`, where `found` is one
@@ -258,16 +258,16 @@ pieces survive a later failure.
     with `occupied (<found>); not touched`.
   - Unit tests for `normalize_remote` and for each `inspect` outcome.
   - Depends on T007.
-- [ ] T018 [US1] `authority` step (FR-007).
+- [X] T018 [US1] `authority` step (FR-007).
   - Check: the authority file exists.
   - Apply: `authority_source` must be readable (otherwise fail naming it); copy it to
     `authority` with `copy_file`, creating the parent directory.
   - It never edits the content or replaces a file that is already there.
-- [ ] T019 [US1] `component-paths` step: a check-only step after `authority` (research R4).
+- [X] T019 [US1] `component-paths` step: a check-only step after `authority` (research R4).
   Every `components.*.source.path` in the authority must equal a checkout path, otherwise
   the step fails naming the uncovered paths. Its `apply` re-checks and fails the same way,
   so nothing is ever changed. Depends on T011, T017.
-- [ ] T020 [US1] `venv`, `hypostasis` and `components` steps (FR-006, FR-008, research R1).
+- [X] T020 [US1] `venv`, `hypostasis` and `components` steps (FR-006, FR-008, research R1).
   - `venv`:
     - check: `<venv>/bin/python --version` succeeds;
     - apply: `uv venv <venv>`.
@@ -280,7 +280,7 @@ pieces survive a later failure.
       `order.install`;
     - apply: `<venv>/bin/hypostasis install --config <authority>`, printing hypostasis's
       output. A non-zero exit fails the step and shows hypostasis's own stderr.
-- [ ] T021 [US1] Service install steps, in `src/hypostasis/pieces.rs` using `services.rs`.
+- [X] T021 [US1] Service install steps, in `src/hypostasis/pieces.rs` using `services.rs`.
   - `services-venv`:
     - check: `<svenv>/bin/python` runs;
     - apply: `uv venv <svenv>`.
@@ -298,7 +298,7 @@ pieces survive a later failure.
       `~/.local/state/local-machine/hypostasis/`, then `systemctl --user daemon-reload`;
     - it never starts, stops or restarts a unit (FR-009). When the unit is active and its
       content changed, print `note: unit changed; run stop then start`.
-- [ ] T022 [US1] `firewall <service>` steps in `src/hypostasis/firewall.rs`, using
+- [X] T022 [US1] `firewall <service>` steps in `src/hypostasis/firewall.rs`, using
   `system::ufw` (research R8). They are placed right after the `authority` step and before
   `component-paths`, so every root step runs before the slow steps (analysis I1). The
   rpg-lib port comes from the authority; when the authority doesn't exist yet at the
@@ -313,7 +313,7 @@ pieces survive a later failure.
   - Notice: `allow port <p>/tcp from <net> (<service>)`.
   - Apply: delete our stale rules, then `sudo ufw allow from <net> to any port <p>
     proto tcp comment 'local-machine hypostasis <service>'`.
-- [ ] T023 [US1] Restore steps in `src/hypostasis/restore.rs` (research R7). Each returns
+- [X] T023 [US1] Restore steps in `src/hypostasis/restore.rs` (research R7). Each returns
   `continue_on_failure() == true`.
   - Backup-folder errors name the folder; when it is unreachable the message says
     `mount <folder>, then run setup`.
@@ -339,7 +339,7 @@ pieces survive a later failure.
       `.mneme-backup`), then `<venv>/bin/mneme mp restore <campaign> --from <dir>`. It runs
       only when the store is missing, so mneme never replaces a present store (FR-010b);
     - no snapshot → fail naming the folder.
-- [ ] T024 [US1] Implement `setup` in `src/hypostasis/setup.rs`.
+- [X] T024 [US1] Implement `setup` in `src/hypostasis/setup.rs`.
   - Build one `action::Action`: the gate is the owner gate from T012, and the steps come in
     data-model order (root steps before the slow steps; analysis I1).
   - The runner asks for root once for `packages`, `linger` and the firewall steps.
@@ -348,7 +348,7 @@ pieces survive a later failure.
     `next: local-machine hypostasis start` and `then: mneme up <campaign>` (FR-017).
   - Map errors to exit codes per contracts/cli.md.
   - Depends on T014–T023.
-- [ ] T025 [P] [US1] Write `tests/hypostasis_setup.rs`, fresh-machine scenarios on
+- [X] T025 [P] [US1] Write `tests/hypostasis_setup.rs`, fresh-machine scenarios on
   `FakeSystem`:
   - a fully missing machine:
     - the steps come in data-model order;
@@ -386,7 +386,7 @@ data, and asks for no password when nothing needs root.
 
 **Independent Test**: T027 scenarios; quickstart.md V4, V5, V6, V15.
 
-- [ ] T027 [P] [US2] Add re-run scenarios to `tests/hypostasis_setup.rs`:
+- [X] T027 [P] [US2] Add re-run scenarios to `tests/hypostasis_setup.rs`:
   - fully set up → only `ok:` lines, `prompted()` false, and no mutating call recorded
     (SC-002);
   - an existing checkout with a different branch or a dirty tree → only read-only git
@@ -401,7 +401,7 @@ data, and asks for no password when nothing needs root.
     issued (FR-010b, SC-007);
   - an authority file that differs from its source → untouched;
   - services active during setup → no `systemctl --user stop|restart`.
-- [ ] T028 [US2] Fix whatever T027 exposes in `src/hypostasis/{pieces,checkout,restore}.rs`
+- [X] T028 [US2] Fix whatever T027 exposes in `src/hypostasis/{pieces,checkout,restore}.rs`
   (expected: none, if T014–T023 follow the check rules). Depends on T027.
 - [ ] T029 [US2] Real-machine validation (by the owner): quickstart.md V4, V5, V6, V15.
 
@@ -417,7 +417,7 @@ takes them down and keeps them down. Neither action ever prompts.
 
 **Independent Test**: T032 scenarios; quickstart.md V7, V8, V9, V10, V11a, V11b, V12.
 
-- [ ] T030 [US3] Implement `start` in `src/hypostasis/start.rs` per contracts/cli.md →
+- [X] T030 [US3] Implement `start` in `src/hypostasis/start.rs` per contracts/cli.md →
   start.
   - Readiness gate (FR-023): every service's install piece, unit piece and data piece must
     be present. For FlexAI the data piece is the app's `--check` (**blocked on
@@ -435,7 +435,7 @@ takes them down and keeps them down. Neither action ever prompts.
   - Keep going with the other services, and exit 1 if any failed.
   - `<url>` uses the machine's address inside `allowed_network`. Move `connect::local_address`
     from `src/export/connect.rs` into a shared place so both subcommands can use it.
-- [ ] T031 [US3] Implement `stop` in `src/hypostasis/stop.rs` per contracts/cli.md → stop.
+- [X] T031 [US3] Implement `stop` in `src/hypostasis/stop.rs` per contracts/cli.md → stop.
   Per service:
   - unit active → `systemctl --user disable --now`, then wait up to 15 s for `probe` to
     fail → `changed: <service> (stopped)`;
@@ -444,7 +444,7 @@ takes them down and keeps them down. Neither action ever prompts.
 
   When the unit is inactive but still enabled, disable it so it stays down after a reboot
   (FR-026).
-- [ ] T032 [P] [US3] Write `tests/hypostasis_services.rs` on `FakeSystem`:
+- [X] T032 [P] [US3] Write `tests/hypostasis_services.rs` on `FakeSystem`:
   - start with all services ready → three `enable --now` calls, each `changed` only after
     the scripted HTTP answer turns on;
   - not ready → exit 4, no `systemctl --user` calls;
@@ -457,7 +457,7 @@ takes them down and keeps them down. Neither action ever prompts.
   - stop when everything is stopped → `ok:` and no calls;
   - stop of a foreign service → error, and no kill or disable issued;
   - every case → `prompted()` false and no `sudo` call at all.
-- [ ] T033 [US3] Wire `start` and `stop` dispatch in `src/hypostasis/mod.rs`. Depends on
+- [X] T033 [US3] Wire `start` and `stop` dispatch in `src/hypostasis/mod.rs`. Depends on
   T030, T031.
 - [ ] T034 [US3] Real-machine validation (by the owner): quickstart.md V7 (stop the
   hand-run rpg-lib first), V8, V9, V10, V11a, V11b, V12.
@@ -475,7 +475,7 @@ status` for everything else.
 
 **Independent Test**: T036 scenarios; quickstart.md V2, V17.
 
-- [ ] T035 [US4] Implement `status` in `src/hypostasis/status.rs` per contracts/cli.md →
+- [X] T035 [US4] Implement `status` in `src/hypostasis/status.rs` per contracts/cli.md →
   status.
   - Run each piece's `check()` through `NoPrompt`. Make `NoPrompt` `pub(crate)` in
     `action.rs` so status can reuse it.
@@ -493,7 +493,7 @@ status` for everything else.
     Unknowns alone don't fail.
   - A piece whose inputs don't exist yet (e.g. no authority file) reports `missing` with
     the reason "needs <earlier piece>".
-- [ ] T036 [P] [US4] Write `tests/hypostasis_status.rs`:
+- [X] T036 [P] [US4] Write `tests/hypostasis_status.rs`:
   - fully set up and running → exit 0 and three `running:` lines;
   - one checkout missing → `missing: checkout <p>`, exit 4, no mutating call;
   - a service stopped → exit 5 and `run 'local-machine hypostasis start'`;
@@ -503,7 +503,8 @@ status` for everything else.
   - the `see also:` line is always printed;
   - root → exit 3.
 - [ ] T037 [US4] Wire `status` dispatch in `src/hypostasis/mod.rs`, and run quickstart.md
-  V2 and V17 on the real machine (by the owner).
+  V2 and V17 on the real machine (by the owner). *(Dispatch wired; V2 smoke-tested with a
+  scratch config dir, see below. V17 is the owner's.)*
 
 **Checkpoint**: all four actions work.
 
@@ -511,13 +512,13 @@ status` for everything else.
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T038 [P] Add a `local-machine hypostasis` section to `README.md` (if present) or to
+- [X] T038 [P] Add a `local-machine hypostasis` section to `README.md` (if present) or to
   `CLAUDE.md`'s command list. It should cover the actions, the two config files, the
   `RPG_LIB_BACKUP_DIR` note from research R7, and that start/stop never prompt.
-- [ ] T039 [P] Put the example config from contracts/hypostasis-config.md into
+- [X] T039 [P] Put the example config from contracts/hypostasis-config.md into
   `specs/002-hypostasis-setup/` as `hypostasis.example.yaml`, with this machine's real
   values, so it can be copied for quickstart step 2.
-- [ ] T040 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
+- [X] T040 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
   `cargo test`: all clean and passing.
 - [ ] T041 Owner migration on Linux-Alien (quickstart step 1). Create `machine.yaml`,
   remove `allowed_network` from `export.yaml`, then check that `local-machine export
@@ -568,4 +569,16 @@ only by merging this branch (constitution → Source Control).
 
 ## Real-Machine Validation Progress
 
-(None yet.)
+- **2026-11-01, V2 smoke test (by Claude, read-only)**: `local-machine hypostasis status
+  --config-dir <scratch>` on Linux-Alien, with `machine.yaml` and a copy of
+  `hypostasis.example.yaml` in a scratch directory (the two TODO(owner) values filled with
+  the authority file itself and the DriveThru FlexAI folder). `~/.config/local-machine` was
+  not touched. Result: no prompt, no change; firewall rows `unknown:`; exit 4. Reported
+  missing: `packages` (python3-dev python3-venv pipx), `services-venv`, the three
+  installs and units, both FlexAI data pieces (no services venv yet). rpg-lib reported
+  `foreign` (the hand-run copy, pid 1098703). Took about 60 s, almost all of it four
+  `mneme mp status` calls.
+- **Found and fixed by that run**: palace campaign names. `data_roots.campaigns` entries
+  are search roots; the campaign is the folder inside holding `.mneme`
+  (`~/phandalin/Phandalin` → `Phandalin`). The first version used the root's basename and
+  reported `restore palace phandalin` as missing.
