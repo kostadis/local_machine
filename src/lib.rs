@@ -3,6 +3,7 @@
 pub mod cli;
 pub mod config;
 pub mod export;
+pub mod hypostasis;
 pub mod machine;
 pub mod output;
 pub mod system;
@@ -46,6 +47,7 @@ pub fn run(cli: &Cli, sys: &dyn System) -> anyhow::Result<u8> {
     let config_dir = config::resolve_dir(cli.config_dir.as_deref());
     match &cli.command {
         Command::Export { action } => export::run(*action, &config_dir, sys),
+        Command::Hypostasis { action } => hypostasis::run(*action, &config_dir, sys),
     }
 }
 

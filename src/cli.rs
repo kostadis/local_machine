@@ -27,6 +27,12 @@ pub enum Command {
         #[command(subcommand)]
         action: ExportAction,
     },
+    /// Bring this machine to where `mneme up` works, and run its local services
+    #[command(arg_required_else_help = true)]
+    Hypostasis {
+        #[command(subcommand)]
+        action: HypostasisAction,
+    },
 }
 
 #[derive(Subcommand, Debug, Clone, Copy)]
@@ -38,5 +44,18 @@ pub enum ExportAction {
     /// Report whether the share is available and how to connect
     Status,
     /// Make the share unavailable, persistently
+    Stop,
+}
+
+#[derive(Subcommand, Debug, Clone, Copy)]
+pub enum HypostasisAction {
+    /// Install and configure everything mneme and the local services need (may need sudo;
+    /// re-runnable; starts nothing)
+    Setup,
+    /// Start rpg-lib, flexai-social and flexai-combat, persistently (never prompts)
+    Start,
+    /// Report what is in place, what is missing, and what is running (never prompts)
+    Status,
+    /// Stop the local services, persistently (never prompts)
     Stop,
 }
