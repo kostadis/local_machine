@@ -47,8 +47,10 @@ impl Pieces {
                 .push(format!("unknown: {name} (run 'sudo -v' first to check)")),
             Check::NeedsChange(reason) => {
                 self.missing += 1;
+                let waits =
+                    name.starts_with("restore flexai-") && restore::services_venv_missing(ctx, sys);
                 let fix = match backup_folder(ctx, name) {
-                    Some(dir) if !restore::reachable(sys, &dir) => {
+                    Some(dir) if !waits && !restore::reachable(sys, &dir) => {
                         format!("mount {}, then {SETUP}", dir.display())
                     }
                     _ => SETUP.to_string(),

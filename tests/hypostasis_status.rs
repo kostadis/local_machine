@@ -164,3 +164,28 @@ fn root_is_exit_3() {
     m.sys.set_euid(0);
     assert_eq!(m.run(HypostasisAction::Status).0, Err(3));
 }
+
+#[test]
+fn flexai_data_waits_for_the_services_venv_instead_of_blaming_the_backup() {
+    let m = Machine::set_up();
+    m.unmount_backups();
+    m.sys.dirs.borrow_mut().retain(|d, _| !d.starts_with(SVENV));
+    m.sys
+        .files
+        .borrow_mut()
+        .retain(|d, _| !d.starts_with(SVENV));
+    let (code, lines) = status(&m);
+    assert_eq!(code, Ok(4), "{lines:#?}");
+    for app in ["flexai-social", "flexai-combat"] {
+        assert!(
+            has_line(
+                &lines,
+                &format!(
+                    "missing: restore {app} data (checked once setup has made {SVENV}) — run \
+                     'local-machine hypostasis setup'"
+                )
+            ),
+            "{lines:#?}"
+        );
+    }
+}
