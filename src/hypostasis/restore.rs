@@ -143,6 +143,12 @@ pub struct AppCheck {
 }
 
 /// `<svenv>/bin/python <mytools>/<app>/app.py --data-dir <dir> --check` (mytools#101).
+/// The FlexAI data check runs `app.py --check` in the services venv; before setup has made
+/// that venv there is nothing to run it with, and the data is not yet known to be missing.
+pub fn services_venv_missing(ctx: &Context, sys: &dyn System) -> bool {
+    sys.path_kind(&ctx.cfg.services_venv) != PathKind::Dir
+}
+
 pub fn flexai_check(ctx: &Context, sys: &dyn System, kind: Kind) -> AppCheck {
     let data_dir = match kind {
         Kind::FlexSocial => &ctx.cfg.flexai_social.data_dir,
@@ -224,6 +230,12 @@ impl Step for FlexData<'_> {
     }
 
     fn check(&self, sys: &dyn System) -> Result<Check> {
+        if services_venv_missing(self.ctx, sys) {
+            return Ok(Check::NeedsChange(format!(
+                "checked once setup has made {}",
+                self.ctx.cfg.services_venv.display()
+            )));
+        }
         let c = flexai_check(self.ctx, sys, self.kind);
         Ok(if c.ok {
             Check::Done
