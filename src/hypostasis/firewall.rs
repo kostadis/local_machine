@@ -13,6 +13,8 @@ use crate::system::{Cmd, System, run_ok};
 use super::Context;
 use super::services::{self, Kind};
 
+const INACTIVE: &str = "ufw inactive; services reachable from any network";
+
 pub fn comment(kind: Kind) -> String {
     format!("local-machine hypostasis {}", kind.name())
 }
@@ -96,6 +98,9 @@ impl Step for FirewallStep<'_> {
                 self.ctx.cfg.authority.display()
             )));
         };
+        if ufw::off_by_conf(sys) {
+            return Ok(Check::DoneWith(INACTIVE.into()));
+        }
         let out = match sys.run(&Cmd::new("ufw").args(["status"]).sudo_n()) {
             Ok(o) if o.success() => o,
             _ => return Ok(Check::Unknown),
@@ -108,9 +113,7 @@ impl Step for FirewallStep<'_> {
                 &self.ctx.machine.allowed_network,
             ) {
                 Verdict::Done => Check::Done,
-                Verdict::Inactive => {
-                    Check::DoneWith("ufw inactive; services reachable from any network".into())
-                }
+                Verdict::Inactive => Check::DoneWith(INACTIVE.into()),
                 Verdict::Change { stale, .. } if !stale.is_empty() => {
                     Check::NeedsChange("config changed".into())
                 }

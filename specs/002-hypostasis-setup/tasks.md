@@ -18,7 +18,7 @@ Context → Testing) and constitution Principle VI call for them:
 - `FakeSystem` scenario tests for every action;
 - the privilege order asserted with `FakeSystem::prompted()`.
 
-Real-machine behaviour is checked by hand with quickstart.md V1–V18.
+Real-machine behaviour is checked by hand with quickstart.md V1–V23.
 
 **Organization**: Tasks are grouped by user story (spec.md):
 - US1: fresh machine to ready (P1)
@@ -403,7 +403,7 @@ data, and asks for no password when nothing needs root.
   - services active during setup → no `systemctl --user stop|restart`.
 - [X] T028 [US2] Fix whatever T027 exposes in `src/hypostasis/{pieces,checkout,restore}.rs`
   (expected: none, if T014–T023 follow the check rules). Depends on T027.
-- [ ] T029 [US2] Real-machine validation (by the owner): quickstart.md V4, V5, V6, V15.
+- [ ] T029 [US2] Real-machine validation (by the owner): quickstart.md V4, V4b, V5, V6, V6b, V15, V22.
 
 **Checkpoint**: setup is safe to re-run on the owner's working machine.
 
@@ -460,7 +460,7 @@ takes them down and keeps them down. Neither action ever prompts.
 - [X] T033 [US3] Wire `start` and `stop` dispatch in `src/hypostasis/mod.rs`. Depends on
   T030, T031.
 - [ ] T034 [US3] Real-machine validation (by the owner): quickstart.md V7 (stop the
-  hand-run rpg-lib first), V8, V9, V10, V11a, V11b, V12.
+  hand-run rpg-lib first), V8, V9, V10, V11a, V11b, V12, V19, V20.
 
 **Checkpoint**: `mneme up` passes its rpg-lib gate, and both FlexAI tools open from
 Windows.
@@ -520,10 +520,11 @@ status` for everything else.
   values, so it can be copied for quickstart step 2.
 - [X] T040 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
   `cargo test`: all clean and passing.
-- [ ] T041 Owner migration on Linux-Alien (quickstart step 1). Create `machine.yaml`,
-  remove `allowed_network` from `export.yaml`, then check that `local-machine export
-  status` is unchanged (V1). Install the new binary with `cargo install --path .`.
-- [ ] T042 Full quickstart V1–V18 pass on the real machine (V13, V14, V16 and V18 need a
+- [ ] T041 Owner migration on Linux-Alien (quickstart step 1). Capture `local-machine
+  export status` with the old binary, install the new one with `cargo install --path .`,
+  create `machine.yaml`, move `allowed_network` (and any `owner`) out of `export.yaml`,
+  then check that `export status` is unchanged (V1).
+- [ ] T042 Full quickstart V1–V23 pass on the real machine (V13, V14, V16 and V18 need a
   fresh VM). Record the results below, as feature 001 did.
 
 ---

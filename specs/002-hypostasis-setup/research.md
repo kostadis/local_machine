@@ -241,7 +241,9 @@ Existing subcommand: `export` (`export.yaml`: `allowed_network`, `share_name`, `
   `allowed_network`; a rule with that comment from another network = config changed →
   replaced (delete then add) like `export`'s Samba rule. ufw inactive → note
   (`ufw inactive; services reachable from any network`), not a missing piece. `sudo -n`
-  failing → `unknown` in status (never prompts).
+  failing → `unknown` in status (never prompts). ufw's rules are root-only (mode 0640), but
+  `/etc/ufw/ufw.conf` is world-readable: `ENABLED=no` there is read as inactive without
+  root. With ufw active and no cached sudo, setup asks to verify (FR-011).
 - rpg-lib's port comes from the authority; a changed port leaves a stale rule — status
   reports rules carrying our comment for ports no longer configured as `config changed`, and
   setup deletes them.
