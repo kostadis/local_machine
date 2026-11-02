@@ -520,10 +520,13 @@ status` for everything else.
   values, so it can be copied for quickstart step 2.
 - [X] T040 `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
   `cargo test`: all clean and passing.
-- [ ] T041 Owner migration on Linux-Alien (quickstart step 1). Capture `local-machine
+- [X] T041 Owner migration on Linux-Alien (quickstart step 1). Capture `local-machine
   export status` with the old binary, install the new one with `cargo install --path .`,
   create `machine.yaml`, move `allowed_network` (and any `owner`) out of `export.yaml`,
   then check that `export status` is unchanged (V1).
+  Done 2026-11-01: `export.yaml` had only `allowed_network` and is now empty (all
+  defaults); `export status` identical before and after (`export: available`, exit 0).
+  V1 passes. The binary installed then was built from a61ce19, before 003's fixes.
 - [ ] T042 Full quickstart V1–V23 pass on the real machine (V13, V14, V16 and V18 need a
   fresh VM). Record the results below, as feature 001 did.
 
