@@ -1,13 +1,14 @@
 # local-machine hypostasis setup — NOT hypostasis's authority file.
 # Copy to ~/.config/local-machine/hypostasis.yaml (quickstart step 2).
-# Values below are Linux-Alien's, observed 2026-11-01, except the two TODO(owner) lines,
-# which have no answer on this machine yet and fail validation until filled in.
+# Values below are Linux-Alien's, observed 2026-11-01, except the TODO(owner) FlexAI
+# data_dir lines, which have no answer on this machine yet and fail validation until
+# filled in.
 
 authority: ~/.config/hypostasis/hypostasis.yaml   # default; may be omitted
 
-# TODO(owner): the seed copy of the authority file, kept in a checkout. None exists yet;
-# e.g. commit a copy to a private repo listed under checkouts and name it here.
-authority_source: TODO-owner-seed-copy-of-the-authority-file
+# The seed copy of the authority file, in the hypostasis-config checkout below
+# (private repo kostadis/hypostasis-config, seeded 2026-11-02).
+authority_source: ~/src/hypostasis-config/hypostasis.yaml
 
 backup_root: "/mnt/g/My Drive/hypostasis/backups"  # Google Drive mount
 # backups:     # each defaults to a folder under backup_root
@@ -28,6 +29,7 @@ checkouts:
   - { path: ~/src/mytools,           repo: https://github.com/kostadis/mytools.git,           branch: main }
   - { path: ~/src/5e-tools-kostadis, repo: https://github.com/kostadis/5e-tools-kostadis.git, branch: kostadis-dev }
   - { path: ~/src/homebrew-private,  repo: https://github.com/kostadis/homebrew-private.git,  branch: master }
+  - { path: ~/src/hypostasis-config, repo: https://github.com/kostadis/hypostasis-config.git, branch: main }
   - path: ~/obelisk
     repo: https://github.com/kostadis/campaigns
     branch: main

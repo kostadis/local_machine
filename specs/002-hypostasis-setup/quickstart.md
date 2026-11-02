@@ -44,11 +44,12 @@ diff ~/export-status.before ~/export-status.after    # V1: no difference
 cp specs/002-hypostasis-setup/hypostasis.example.yaml ~/.config/local-machine/hypostasis.yaml
 ```
 
-Resolve both `TODO(owner)` lines first. Until then they are not absolute paths, and every
+Resolve the `TODO(owner)` lines first. Until then they are not absolute paths, and every
 action exits 3 naming the key:
 
-- `authority_source`: commit a seed copy of `~/.config/hypostasis/hypostasis.yaml` to a
-  checkout listed under `checkouts`, and name it here.
+- `authority_source` is already set: the seed copy of `~/.config/hypostasis/hypostasis.yaml`
+  lives in the `kostadis/hypostasis-config` checkout. After editing the live authority
+  file, commit a fresh copy there so a new machine is seeded with it.
 - `flexai_social.data_dir`, `flexai_combat.data_dir`: local folders, with copies of the
   workbooks in `<backup_root>/flexai-social` and `-combat` so setup can restore them.
 
