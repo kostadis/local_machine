@@ -113,9 +113,9 @@ the end (T038–T039); anything after that becomes a GitHub issue (T040), not a 
 
 ## Phase 7: Review & Close
 
-- [ ] T038 Run `/code-review` once on the branch diff against `main` (Opus); list the confirmed findings
-- [ ] T039 Fix the confirmed findings from T038 in one pass, by Sonnet subagent; `cargo test`, clippy, fmt green; no second review pass
-- [ ] T040 File every remaining finding, nit or follow-up (including any T037 drift and a skipped T036) as a GitHub issue on kostadis/local_machine via the GitHub MCP tools, each linking issue #1; then merge the branch into `main`
+- [X] T038 Run `/code-review` once on the branch diff against `main` (Opus); list the confirmed findings
+- [X] T039 Fix the confirmed findings from T038 in one pass, by Sonnet subagent; `cargo test`, clippy, fmt green; no second review pass
+- [X] T040 File every remaining finding, nit or follow-up (including any T037 drift and a skipped T036) as a GitHub issue on kostadis/local_machine via the GitHub MCP tools, each linking issue #1; then merge the branch into `main`
 
 ## Dependencies & Execution Order
 

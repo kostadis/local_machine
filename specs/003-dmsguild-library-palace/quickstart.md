@@ -53,3 +53,5 @@ even when the library is down; no prompt in any library path (`FakeSystem::promp
   yet (CampaignGenerator must be reinstalled at a commit with the 044 `library` command),
   and the live authority `~/.config/hypostasis/hypostasis.yaml` has no `library:` block
   (added to `hypostasis-config` on branch `003-library-block`, not yet merged or copied).
+- 2026-11-20 — Review: one pass (re-run once, scoped, after the first run was cut off). No
+  confirmed findings. Follow-ups filed: local_machine #2–#6, CampaignGenerator #671.
