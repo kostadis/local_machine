@@ -192,7 +192,7 @@ fn flexai_data_waits_for_the_services_venv_instead_of_blaming_the_backup() {
 
 // ---------------------------------------------------------------- the library palace (003 US2)
 
-const LIB_STATUS: &str = "/home/kostadis/.venvs/main/bin/library status --json";
+const LIB_STATUS: &str = "/home/kostadis/.venvs/main/bin/library status --json --config /home/kostadis/.config/hypostasis/hypostasis.yaml";
 const AUTH: &str = "/home/kostadis/.config/hypostasis/hypostasis.yaml";
 
 /// Only `library status --json` may reach the library binary, and it is reported once.

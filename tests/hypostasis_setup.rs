@@ -581,8 +581,8 @@ fn running_services_are_never_stopped_or_restarted_by_setup() {
 // ---------------------------------------------------------------- the library palace (003 US1)
 
 const NO_LIBRARY: &str = include_str!("fixtures/authority-no-library.yaml");
-const BUILD: &str = "/home/kostadis/.venvs/main/bin/library build";
-const STATUS: &str = "/home/kostadis/.venvs/main/bin/library status --json";
+const BUILD: &str = "/home/kostadis/.venvs/main/bin/library build --config /home/kostadis/.config/hypostasis/hypostasis.yaml";
+const STATUS: &str = "/home/kostadis/.venvs/main/bin/library status --json --config /home/kostadis/.config/hypostasis/hypostasis.yaml";
 
 /// A set-up machine whose library palace is missing (everything else in place).
 fn without_palace() -> Machine {
@@ -669,17 +669,99 @@ fn p1_no_library_block_is_refused() {
     );
 }
 
-#[test]
-fn p2_missing_library_command_is_refused() {
+const INSTALL: &str = "/home/kostadis/.venvs/main/bin/hypostasis install --config ";
+
+fn without_command() -> Machine {
     let m = without_palace();
     m.sys
         .files
         .borrow_mut()
         .remove(std::path::Path::new(LIB_BIN));
-    refused(
-        &m,
-        "needs the library command from CampaignGenerator — run 'local-machine hypostasis setup'",
+    m
+}
+
+#[test]
+fn p2_missing_library_command_is_reinstalled_then_built() {
+    let m = without_command();
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Ok(0), "{lines:#?}");
+    let adding = position(&lines, |l| l == "adding: library palace");
+    assert_eq!(
+        lines[adding + 1],
+        "note: library palace: reinstalling components to get the library command"
     );
+    assert!(lines[adding + 2].starts_with("note: library palace: building from "));
+    assert!(has_line(&lines, "changed: library palace"));
+    let calls = m.sys.calls();
+    let install = calls.iter().position(|c| c.starts_with(INSTALL)).unwrap();
+    assert_eq!(calls[install], format!("{INSTALL}{AUTHORITY}"));
+    let build = calls.iter().position(|c| c == BUILD).unwrap();
+    assert!(install < build);
+    assert!(!m.sys.prompted());
+}
+
+#[test]
+fn p2_command_still_missing_after_install_fails_without_building() {
+    let m = without_command();
+    // The installer runs but declares no library script.
+    m.sys.on_prefix(INSTALL, |s, _| {
+        s.files.borrow_mut().remove(std::path::Path::new(LIB_BIN));
+    });
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Err(1), "{lines:#?}");
+    assert!(
+        has_line(
+            &lines,
+            "error: library palace: needs the library command from CampaignGenerator; 'hypostasis install' did not provide it — check that CampaignGenerator declares the library script"
+        ),
+        "{lines:#?}"
+    );
+    assert!(!m.calls_matching(INSTALL).is_empty());
+    assert!(m.calls_matching(BUILD).is_empty());
+    assert!(rmdirs(&m).is_empty());
+    assert!(!m.sys.prompted());
+}
+
+#[test]
+fn library_calls_carry_the_authority_path() {
+    let m = without_palace();
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Ok(0), "{lines:#?}");
+    let calls = m.calls_matching("/bin/library");
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("/home/kostadis/.venvs/main/bin/library build"))
+    );
+    assert!(calls.iter().any(|c| c.contains(" status --json")));
+    for c in &calls {
+        assert!(c.ends_with(&format!(" --config {AUTHORITY}")), "{c}");
+    }
+}
+
+#[test]
+fn library_calls_carry_a_non_default_authority_path() {
+    let m = Machine::fresh();
+    let other = "/home/kostadis/elsewhere/hyp.yaml";
+    let p = m.config_dir.path().join("hypostasis.yaml");
+    let text = std::fs::read_to_string(&p).unwrap();
+    std::fs::write(&p, format!("authority: {other}\n{text}")).unwrap();
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Ok(0), "{lines:#?}");
+    let calls = m.calls_matching("/bin/library");
+    assert!(calls.iter().any(|c| c.contains(" build ")), "{calls:#?}");
+    assert!(
+        calls.iter().any(|c| c.contains(" status --json ")),
+        "{calls:#?}"
+    );
+    for c in &calls {
+        assert!(c.ends_with(&format!(" --config {other}")), "{c}");
+    }
+    let (_, lines) = m.run(local_machine::cli::HypostasisAction::Status);
+    assert!(!lines.is_empty());
+    for c in m.calls_matching("/bin/library") {
+        assert!(c.ends_with(&format!(" --config {other}")), "{c}");
+    }
 }
 
 #[test]

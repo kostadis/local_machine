@@ -8,6 +8,7 @@ use anyhow::{Result, bail};
 
 use super::Context;
 use super::authority::{Authority, LibraryKeys};
+use super::pieces::run_install;
 use crate::say;
 use crate::system::action::{Check, Step};
 use crate::system::{Cmd, PathKind, System};
@@ -37,10 +38,11 @@ impl LibraryState {
     }
 }
 
-/// `<venv>/bin/library <sub...>` with the authority's environment.
+/// `<venv>/bin/library <sub...> --config <authority>` with the authority's environment.
 pub fn library_cmd(a: &Authority, sub: &[&str]) -> Cmd {
     Cmd::new(&a.bin("library").to_string_lossy())
         .args(sub)
+        .args(["--config", &a.path.to_string_lossy()])
         .envs(&a.env)
 }
 
@@ -186,24 +188,28 @@ pub fn embedder_answers(sys: &dyn System, a: &Authority) -> Option<bool> {
 
 const SETUP: &str = "local-machine hypostasis setup";
 
-/// P1 (library keys present) and P2 (library command installed): `(reason, fix)` on failure.
+/// P1 (library keys present): `(reason, fix)` on failure.
+fn p1(ctx: &Context, a: &Authority) -> Result<LibraryKeys, (String, String)> {
+    match &a.library {
+        Ok(k) => Ok(k.clone()),
+        Err(reason) => Err((
+            format!(
+                "not configured ({reason} in {})",
+                ctx.cfg.authority.display()
+            ),
+            format!("add it there and to {}", ctx.cfg.authority_source.display()),
+        )),
+    }
+}
+
+/// P1 and P2 (library command installed): `(reason, fix)` on failure. Read-only callers
+/// (`status`, `start`) report P2; `setup` fixes it by reinstalling the components.
 pub fn p1_p2(
     ctx: &Context,
     sys: &dyn System,
     a: &Authority,
 ) -> Result<LibraryKeys, (String, String)> {
-    let keys = match &a.library {
-        Ok(k) => k.clone(),
-        Err(reason) => {
-            return Err((
-                format!(
-                    "not configured ({reason} in {})",
-                    ctx.cfg.authority.display()
-                ),
-                format!("add it there and to {}", ctx.cfg.authority_source.display()),
-            ));
-        }
-    };
+    let keys = p1(ctx, a)?;
     if sys.path_kind(&a.bin("library")) == PathKind::Missing {
         return Err((
             "needs the library command from CampaignGenerator".to_string(),
@@ -284,9 +290,10 @@ impl<'a> LibraryPalace<'a> {
         }
     }
 
-    /// P1..P5 in order; the first failure is `<reason> — <fix>`.
+    /// P1, P3..P5 in order (P2, the command, is fixed by `apply` before this runs); the first
+    /// failure is `<reason> — <fix>`.
     fn preconditions(&self, sys: &dyn System, a: &Authority) -> Result<LibraryKeys, String> {
-        let keys = p1_p2(self.ctx, sys, a).map_err(|(r, f)| format!("{r} — {f}"))?;
+        let keys = p1(self.ctx, a).map_err(|(r, f)| format!("{r} — {f}"))?;
         if sys.path_kind(&a.rpg_library_db) == PathKind::Missing {
             return Err(format!(
                 "needs the rpg library DB — run '{SETUP}' (restores it)"
@@ -317,11 +324,16 @@ impl Step for LibraryPalace<'_> {
         let Some(a) = self.ctx.authority(sys)? else {
             return Ok(Check::NeedsChange("needs the authority file".into()));
         };
-        if a.library.is_err() || sys.path_kind(&a.bin("library")) == PathKind::Missing {
+        if a.library.is_err() {
             return Ok(Check::NeedsChange(match self.preconditions(sys, &a) {
                 Err(e) => e,
-                Ok(_) => "needs the library command".into(),
+                Ok(_) => "not configured".into(),
             }));
+        }
+        if sys.path_kind(&a.bin("library")) == PathKind::Missing {
+            return Ok(Check::NeedsChange(
+                "needs the library command from CampaignGenerator".into(),
+            ));
         }
         Ok(match observe(sys, &a) {
             LibraryState::Ready { books, .. } => Check::DoneWith(format!("{books} books")),
@@ -344,6 +356,18 @@ impl Step for LibraryPalace<'_> {
         let Some(a) = self.ctx.authority(sys)? else {
             bail!("{} does not exist", self.ctx.cfg.authority.display());
         };
+        if let Err(e) = p1(self.ctx, &a) {
+            bail!("{} — {}", e.0, e.1);
+        }
+        if sys.path_kind(&a.bin("library")) == PathKind::Missing {
+            say!("note: library palace: reinstalling components to get the library command");
+            run_install(sys, &a)?;
+            if sys.path_kind(&a.bin("library")) == PathKind::Missing {
+                bail!(
+                    "needs the library command from CampaignGenerator; 'hypostasis install' did not provide it — check that CampaignGenerator declares the library script"
+                );
+            }
+        }
         let keys = match self.preconditions(sys, &a) {
             Ok(k) => k,
             Err(e) => bail!("{e}"),
@@ -444,6 +468,7 @@ mod tests {
     use crate::system::fake::FakeSystem;
 
     const LIB: &str = "/home/kostadis/.venvs/main/bin/library";
+    const AUTH: &str = "/home/kostadis/.config/hypostasis/hypostasis.yaml";
 
     fn sys_with_lib() -> FakeSystem {
         let s = FakeSystem::new("kostadis");
@@ -453,7 +478,7 @@ mod tests {
 
     fn observe_with(out: Output) -> LibraryState {
         let s = sys_with_lib();
-        s.respond(&format!("{LIB} status --json"), out);
+        s.respond(&format!("{LIB} status --json --config {AUTH}"), out);
         observe(&s, &authority())
     }
 
@@ -524,7 +549,7 @@ mod tests {
     fn observe_runs_with_the_authority_env() {
         let s = sys_with_lib();
         s.respond(
-            &format!("{LIB} status --json"),
+            &format!("{LIB} status --json --config {AUTH}"),
             Output::ok(r#"{"books":1}"#),
         );
         let a = authority();
