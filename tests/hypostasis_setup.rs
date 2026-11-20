@@ -244,7 +244,7 @@ fn unmounted_backups_fail_every_restore_after_the_software() {
         );
     }
     assert!(
-        lines.last().unwrap().contains("7 steps failed"),
+        lines.last().unwrap().contains("8 steps failed"),
         "{lines:#?}"
     );
 
@@ -259,7 +259,9 @@ fn unmounted_backups_fail_every_restore_after_the_software() {
         .filter(|l| l.starts_with("changed: "))
         .collect();
     assert!(
-        changed.iter().all(|l| l.starts_with("changed: restore ")),
+        changed
+            .iter()
+            .all(|l| l.starts_with("changed: restore ") || *l == "changed: library palace"),
         "{changed:#?}"
     );
 }
@@ -574,4 +576,229 @@ fn running_services_are_never_stopped_or_restarted_by_setup() {
                 .is_empty()
         );
     }
+}
+
+// ---------------------------------------------------------------- the library palace (003 US1)
+
+const NO_LIBRARY: &str = include_str!("fixtures/authority-no-library.yaml");
+const BUILD: &str = "/home/kostadis/.venvs/main/bin/library build";
+const STATUS: &str = "/home/kostadis/.venvs/main/bin/library status --json";
+
+/// A set-up machine whose library palace is missing (everything else in place).
+fn without_palace() -> Machine {
+    let m = Machine::set_up();
+    m.sys.dirs.borrow_mut().remove(std::path::Path::new(PALACE));
+    m
+}
+
+fn rmdirs(m: &Machine) -> Vec<String> {
+    m.calls_matching("rmdir ")
+}
+
+fn has_line(lines: &[String], l: &str) -> bool {
+    lines.iter().any(|x| x == l)
+}
+
+#[test]
+fn missing_library_is_built_interactively_and_verified() {
+    let m = without_palace();
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Ok(0), "{lines:#?}");
+    assert_eq!(m.calls_matching(BUILD).len(), 1);
+    let calls = m.sys.calls();
+    let build = calls.iter().position(|c| c == BUILD).unwrap();
+    assert!(calls[build + 1..].iter().any(|c| c == STATUS));
+    let adding = position(&lines, |l| l == "adding: library palace");
+    assert!(lines[adding + 1].starts_with("note: library palace: building from "));
+    assert_eq!(lines[adding + 2], "note: library palace: 2 books");
+    assert_eq!(lines[adding + 3], "changed: library palace");
+    // The child's environment is the authority's, whatever this process has (SC-003).
+    let env = m.sys.env_of(BUILD).unwrap();
+    assert!(env.contains(&("MEMPALACE_BACKEND".into(), "turbovec".into())));
+    assert!(env.contains(&(
+        "MEMPALACE_EMBEDDING_ENDPOINT".into(),
+        "http://192.168.56.1:11434".into()
+    )));
+    assert!(!m.sys.prompted());
+}
+
+#[test]
+fn existing_library_is_left_alone() {
+    let m = Machine::set_up();
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Ok(0), "{lines:#?}");
+    assert!(has_line(&lines, "ok: library palace (2 books)"));
+    assert!(m.calls_matching(BUILD).is_empty());
+    assert!(!m.sys.prompted());
+    for st in [5, 6] {
+        m.sys
+            .respond_fn(STATUS, move |_, _| Output::fail(st, "something"));
+        let (code, lines) = setup(&m);
+        assert_eq!(code, Ok(0), "{st}: {lines:#?}");
+        assert!(has_line(
+            &lines,
+            "ok: library palace (present; see 'local-machine hypostasis status')"
+        ));
+        assert!(m.calls_matching(BUILD).is_empty());
+        assert!(rmdirs(&m).is_empty());
+    }
+    assert!(!m.sys.prompted());
+}
+
+fn refused(m: &Machine, expect: &str) {
+    let (code, lines) = setup(m);
+    assert_eq!(code, Err(1), "{lines:#?}");
+    assert!(
+        has_line(&lines, &format!("error: library palace: {expect}")),
+        "wanted {expect:?} in {lines:#?}"
+    );
+    assert!(m.calls_matching(BUILD).is_empty(), "{lines:#?}");
+    assert!(rmdirs(m).is_empty());
+    assert!(!m.sys.prompted());
+}
+
+#[test]
+fn p1_no_library_block_is_refused() {
+    let m = without_palace();
+    m.sys.set_file(AUTHORITY, NO_LIBRARY);
+    refused(
+        &m,
+        &format!(
+            "not configured (no library: block in {AUTHORITY}) — add it there and to {AUTHORITY_SOURCE}"
+        ),
+    );
+}
+
+#[test]
+fn p2_missing_library_command_is_refused() {
+    let m = without_palace();
+    m.sys
+        .files
+        .borrow_mut()
+        .remove(std::path::Path::new(LIB_BIN));
+    refused(
+        &m,
+        "needs the library command from CampaignGenerator — run 'local-machine hypostasis setup'",
+    );
+}
+
+#[test]
+fn p3_missing_rpg_library_db_is_refused_and_other_restores_still_run() {
+    let m = without_palace();
+    m.unmount_backups();
+    m.sys.files.borrow_mut().remove(std::path::Path::new(DB));
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Err(1), "{lines:#?}");
+    assert!(
+        has_line(
+            &lines,
+            "error: library palace: needs the rpg library DB — run 'local-machine hypostasis setup' (restores it)"
+        ),
+        "{lines:#?}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.starts_with("error: restore rpg-library"))
+    );
+    assert!(m.calls_matching(BUILD).is_empty());
+    assert!(!m.sys.prompted());
+}
+
+#[test]
+fn p4_unreadable_source_folder_is_refused_and_restores_still_run() {
+    let m = without_palace();
+    m.sys
+        .dirs
+        .borrow_mut()
+        .remove(std::path::Path::new(SOURCE_ROOT));
+    refused(
+        &m,
+        &format!(
+            "source folder {SOURCE_ROOT} not readable — mount {SOURCE_ROOT}, then run 'local-machine hypostasis setup'"
+        ),
+    );
+    let (_, lines) = setup(&m);
+    assert!(has_line(&lines, "ok: restore rpg-library"), "{lines:#?}");
+}
+
+#[test]
+fn p5_palace_inside_a_live_palace_is_refused() {
+    let m = without_palace();
+    let text = m.sys.file(AUTHORITY).unwrap().replace(
+        "~/.local/share/hypostasis/library/palace",
+        "~/.mempalace/library",
+    );
+    m.sys.set_file(AUTHORITY, &text);
+    refused(
+        &m,
+        &format!(
+            "{HOME}/.mempalace/library overlaps live palace {HOME}/.mempalace — change library.palace in {AUTHORITY}"
+        ),
+    );
+}
+
+#[test]
+fn p6_embedder_not_answering_is_refused() {
+    let m = without_palace();
+    m.sys.set_http_at("192.168.56.1", 11434, &[None]);
+    refused(
+        &m,
+        "embedder http://192.168.56.1:11434 not answering — start it, then run 'local-machine hypostasis setup'",
+    );
+}
+
+#[test]
+fn occupied_palace_path_is_not_touched() {
+    let m = Machine::set_up();
+    m.sys
+        .respond_fn(STATUS, |_, _| Output::fail(4, "not built"));
+    refused(
+        &m,
+        &format!("{PALACE} occupied (not a built library); not touched"),
+    );
+    assert!(m.sys.has_dir(PALACE));
+}
+
+#[test]
+fn failed_build_removes_the_partial_palace() {
+    let m = without_palace();
+    m.sys.respond_fn(BUILD, |_, _| Output::fail(1, "boom"));
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Err(1), "{lines:#?}");
+    assert!(has_line(
+        &lines,
+        "error: library palace: build failed (exit 1); removed the partial palace"
+    ));
+    assert!(!m.sys.has_dir(PALACE));
+    assert_eq!(rmdirs(&m), [format!("rmdir {PALACE}")]);
+    assert!(!m.sys.prompted());
+}
+
+#[test]
+fn build_that_leaves_status_unready_removes_the_palace() {
+    let m = without_palace();
+    m.sys.respond_fn(STATUS, |_, _| Output::fail(4, "empty"));
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Err(1), "{lines:#?}");
+    assert!(has_line(
+        &lines,
+        "error: library palace: built but library status says: empty; removed the partial palace"
+    ));
+    assert!(!m.sys.has_dir(PALACE));
+    assert!(!m.sys.prompted());
+}
+
+#[test]
+fn a_palace_that_existed_before_is_never_removed() {
+    // Status says not built while a directory sits at the path: refused, never removed.
+    let m = Machine::set_up();
+    m.sys
+        .respond_fn(STATUS, |_, _| Output::fail(4, "not built"));
+    m.sys.respond_fn(BUILD, |_, _| Output::fail(1, "boom"));
+    let (code, _) = setup(&m);
+    assert_eq!(code, Err(1));
+    assert!(m.sys.has_dir(PALACE));
+    assert!(rmdirs(&m).is_empty());
+    assert!(m.calls_matching(BUILD).is_empty());
 }

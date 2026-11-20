@@ -4,8 +4,12 @@
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
+use anyhow::{Result, bail};
+
 use super::Context;
 use super::authority::{Authority, LibraryKeys};
+use crate::say;
+use crate::system::action::{Check, Step};
 use crate::system::{Cmd, PathKind, System};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -178,6 +182,190 @@ pub fn embedder_answers(sys: &dyn System, a: &Authority) -> Option<bool> {
         Some(_) => true,
         None => false,
     })
+}
+
+const SETUP: &str = "local-machine hypostasis setup";
+
+/// The `library palace` setup piece: build the DMG library palace when it is missing, and
+/// remove a half-built one if the build fails (specs/003-dmsguild-library-palace R5, R6, R10).
+pub struct LibraryPalace<'a> {
+    ctx: &'a Context,
+    /// Set only once the guard has passed and the build is about to run.
+    created: bool,
+}
+
+impl<'a> LibraryPalace<'a> {
+    pub fn new(ctx: &'a Context) -> Self {
+        LibraryPalace {
+            ctx,
+            created: false,
+        }
+    }
+
+    /// P1..P5 in order; the first failure is `<reason> — <fix>`.
+    fn preconditions(&self, sys: &dyn System, a: &Authority) -> Result<LibraryKeys, String> {
+        let keys = match &a.library {
+            Ok(k) => k.clone(),
+            Err(reason) => {
+                return Err(format!(
+                    "not configured ({reason} in {}) — add it there and to {}",
+                    self.ctx.cfg.authority.display(),
+                    self.ctx.cfg.authority_source.display()
+                ));
+            }
+        };
+        if sys.path_kind(&a.bin("library")) == PathKind::Missing {
+            return Err(format!(
+                "needs the library command from CampaignGenerator — run '{SETUP}'"
+            ));
+        }
+        if sys.path_kind(&a.rpg_library_db) == PathKind::Missing {
+            return Err(format!(
+                "needs the rpg library DB — run '{SETUP}' (restores it)"
+            ));
+        }
+        if sys.path_kind(&keys.source_root) != PathKind::Dir {
+            let p = keys.source_root.display();
+            return Err(format!(
+                "source folder {p} not readable — mount {p}, then run '{SETUP}'"
+            ));
+        }
+        guard(sys, self.ctx, a, &keys).map_err(|e| {
+            format!(
+                "{e} — change library.palace in {}",
+                self.ctx.cfg.authority.display()
+            )
+        })?;
+        Ok(keys)
+    }
+}
+
+impl Step for LibraryPalace<'_> {
+    fn name(&self) -> &str {
+        "library palace"
+    }
+
+    fn check(&self, sys: &dyn System) -> Result<Check> {
+        let Some(a) = self.ctx.authority(sys)? else {
+            return Ok(Check::NeedsChange("needs the authority file".into()));
+        };
+        if a.library.is_err() || sys.path_kind(&a.bin("library")) == PathKind::Missing {
+            return Ok(Check::NeedsChange(match self.preconditions(sys, &a) {
+                Err(e) => e,
+                Ok(_) => "needs the library command".into(),
+            }));
+        }
+        Ok(match observe(sys, &a) {
+            LibraryState::Ready { books, .. } => Check::DoneWith(format!("{books} books")),
+            LibraryState::EmbedderMismatch(_) | LibraryState::LivePalace(_) => {
+                Check::DoneWith("present; see 'local-machine hypostasis status'".into())
+            }
+            LibraryState::NotBuilt(_) => Check::NeedsChange(match self.preconditions(sys, &a) {
+                Err(e) => e,
+                Ok(_) => "not built".into(),
+            }),
+            LibraryState::NotConfigured(m) | LibraryState::Failed(m) => Check::NeedsChange(m),
+        })
+    }
+
+    fn notice(&self, _found: &Check) -> Option<String> {
+        None
+    }
+
+    fn apply(&mut self, sys: &dyn System) -> Result<()> {
+        let Some(a) = self.ctx.authority(sys)? else {
+            bail!("{} does not exist", self.ctx.cfg.authority.display());
+        };
+        let keys = match self.preconditions(sys, &a) {
+            Ok(k) => k,
+            Err(e) => bail!("{e}"),
+        };
+        if sys.path_kind(&keys.palace) != PathKind::Missing {
+            bail!(
+                "{} occupied (not a built library); not touched",
+                keys.palace.display()
+            );
+        }
+        if let Some(e) = embedder(&a) {
+            if embedder_answers(sys, &a) == Some(false) {
+                bail!(
+                    "embedder {} not answering — start it, then run '{SETUP}'",
+                    e.url
+                );
+            }
+        } else if let Some(url) = a
+            .env
+            .iter()
+            .find(|(k, _)| k == "MEMPALACE_EMBEDDING_ENDPOINT")
+            .map(|(_, v)| v)
+        {
+            say!("unknown: embedder {url} (cannot probe https); building anyway");
+        }
+        say!(
+            "note: library palace: building from {}; this can take a while",
+            keys.source_root.display()
+        );
+        // Only now may a failure remove the palace path: it did not exist, and the guard passed.
+        self.created = true;
+        let code = sys
+            .run(&library_cmd(&a, &["build"]).interactive())
+            .map(|o| o.code);
+        match code {
+            Ok(0) => {}
+            Ok(n) => {
+                self.remove_partial(sys, &keys);
+                bail!("build failed (exit {n}); removed the partial palace");
+            }
+            Err(e) => {
+                self.remove_partial(sys, &keys);
+                bail!("build failed ({e}); removed the partial palace");
+            }
+        }
+        match observe(sys, &a) {
+            LibraryState::Ready { books, .. } => {
+                say!("note: library palace: {books} books");
+                Ok(())
+            }
+            other => {
+                let msg = match other {
+                    LibraryState::NotConfigured(m)
+                    | LibraryState::NotBuilt(m)
+                    | LibraryState::EmbedderMismatch(m)
+                    | LibraryState::LivePalace(m)
+                    | LibraryState::Failed(m) => m,
+                    LibraryState::Ready { .. } => String::new(),
+                };
+                self.remove_partial(sys, &keys);
+                bail!("built but library status says: {msg}; removed the partial palace");
+            }
+        }
+    }
+
+    fn rollback(&mut self, sys: &dyn System) -> Result<()> {
+        if self.created
+            && let Some(a) = self.ctx.authority(sys)?
+            && let Ok(keys) = &a.library
+            && guard(sys, self.ctx, &a, keys).is_ok()
+        {
+            self.remove_partial(sys, keys);
+        }
+        Ok(())
+    }
+
+    fn continue_on_failure(&self) -> bool {
+        true
+    }
+}
+
+impl LibraryPalace<'_> {
+    /// Remove `keys.palace` and nothing else; callers reach this only after the guard passed
+    /// and only when the path did not exist before this apply (`created`).
+    fn remove_partial(&mut self, sys: &dyn System, keys: &LibraryKeys) {
+        if self.created && sys.path_kind(&keys.palace) != PathKind::Missing {
+            let _ = sys.remove_dir_all(&keys.palace);
+        }
+        self.created = false;
+    }
 }
 
 #[cfg(test)]

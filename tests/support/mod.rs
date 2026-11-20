@@ -29,6 +29,9 @@ pub const SOCIAL_FILES: &[&str] = &[
     "FlexAI_Social_Choice_DCs_2021_01_04.xlsx",
 ];
 pub const COMBAT_FILES: &[&str] = &["FlexAI_Combat_2021_01_04.xlsx"];
+pub const LIB_BIN: &str = "/home/kostadis/.venvs/main/bin/library";
+pub const PALACE: &str = "/home/kostadis/.local/share/hypostasis/library/palace";
+pub const SOURCE_ROOT: &str = "/mnt/g/My Drive/DriveThru/Dungeon Masters Guild";
 pub const CAMPAIGNS: &[&str] = &["phandalin", "out-of-the-abyss", "obelisk", "toee"];
 pub const PACKAGES: &[&str] = &["git", "sqlite3", "nodejs", "npm", "ufw"];
 
@@ -328,6 +331,23 @@ impl Machine {
             |s, _| mark(s, &format!("{SVENV}/.flask")),
         );
 
+        // The library palace: the command arrives with the components; a build makes the
+        // palace; status answers from whether it exists.
+        s.set_dir(SOURCE_ROOT, 1000);
+        s.set_http_at("192.168.56.1", 11434, &[Some(200)]);
+        s.on_prefix(
+            &format!("{VENV}/bin/hypostasis install --config "),
+            |s, _| mark(s, LIB_BIN),
+        );
+        s.respond_fn(&format!("{LIB_BIN} status --json"), |s, _| {
+            if s.has_dir(PALACE) {
+                Output::ok(r#"{"books": 2, "stale": [], "index_bytes": 1}"#)
+            } else {
+                Output::fail(4, "library not built")
+            }
+        });
+        s.on_prefix(&format!("{LIB_BIN} build"), |s, _| s.set_dir(PALACE, 1000));
+
         // Restores.
         s.respond_prefix("sqlite3 ", Output::ok("ok\n"));
         for (app, dir, files) in [
@@ -448,6 +468,7 @@ impl Machine {
             "systemctl --user is-",
             "ss -ltnpH",
             "sqlite3 ",
+            "/home/kostadis/.venvs/main/bin/library status",
         ];
         self.sys
             .calls()
