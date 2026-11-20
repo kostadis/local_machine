@@ -23,6 +23,18 @@ pub struct Authority {
     pub campaigns: Vec<PathBuf>,
     pub component_paths: Vec<PathBuf>,
     pub component_names: Vec<String>,
+    /// `env:` pairs, in file order; handed to every library command.
+    pub env: Vec<(String, String)>,
+    /// `data_roots.mempalace` (default `~/.mempalace`); used only by the live-palace guard.
+    pub mempalace_root: PathBuf,
+    /// The `library:` keys local-machine needs, or why they are unusable. Never fails the parse.
+    pub library: Result<LibraryKeys, String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LibraryKeys {
+    pub palace: PathBuf,
+    pub source_root: PathBuf,
 }
 
 impl Authority {
@@ -208,6 +220,29 @@ pub fn parse(
         Some(_) => return Err(invalid("order.install must be a list".to_string())),
     };
 
+    let env = match m.get("env") {
+        None | Some(Value::Null) => Vec::new(),
+        Some(Value::Mapping(e)) => {
+            let mut pairs = Vec::new();
+            for (k, v) in e {
+                let key = k.as_str().unwrap_or_default().to_string();
+                match v {
+                    Value::String(s) => pairs.push((key, s.clone())),
+                    _ => return Err(invalid(format!("env.{key} must be a string"))),
+                }
+            }
+            pairs
+        }
+        Some(_) => return Err(invalid("env must be a mapping".to_string())),
+    };
+
+    let mempalace_root = match get(&m, "data_roots.mempalace") {
+        Some(Value::String(s)) if !s.trim().is_empty() => expand_tilde(s.trim(), home),
+        _ => home.join(".mempalace"),
+    };
+
+    let library = parse_library(&m, home);
+
     Ok(Authority {
         path: path.to_path_buf(),
         venv,
@@ -219,6 +254,34 @@ pub fn parse(
         campaigns,
         component_paths,
         component_names,
+        env,
+        mempalace_root,
+        library,
+    })
+}
+
+fn parse_library(m: &Mapping, home: &Path) -> Result<LibraryKeys, String> {
+    let block = match m.get("library") {
+        Some(Value::Mapping(b)) => b,
+        _ => return Err("no library: block".to_string()),
+    };
+    let key = |name: &str| -> Result<PathBuf, String> {
+        match block.get(name) {
+            None | Some(Value::Null) => Err(format!("library.{name} is missing")),
+            Some(Value::String(s)) if !s.trim().is_empty() => {
+                let p = expand_tilde(s.trim(), home);
+                if p.is_absolute() {
+                    Ok(p)
+                } else {
+                    Err(format!("library.{name} must be an absolute path"))
+                }
+            }
+            Some(_) => Err(format!("library.{name} must be an absolute path")),
+        }
+    };
+    Ok(LibraryKeys {
+        palace: key("palace")?,
+        source_root: key("source_root")?,
     })
 }
 
@@ -378,5 +441,76 @@ mod tests {
             e,
             "/a/hypostasis.yaml: hypostasis's authority file: missing or unreadable"
         );
+    }
+
+    const NO_LIBRARY: &str = include_str!("../../tests/fixtures/authority-no-library.yaml");
+
+    #[test]
+    fn env_and_library_keys_parse() {
+        let a = parse_str(FIXTURE).unwrap();
+        let keys: Vec<&str> = a.env.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(
+            keys,
+            [
+                "MEMPALACE_BACKEND",
+                "MEMPALACE_EMBEDDING_PROVIDER",
+                "MEMPALACE_EMBEDDING_MODEL",
+                "MEMPALACE_EMBEDDING_ENDPOINT"
+            ]
+        );
+        assert_eq!(a.env[0].1, "turbovec");
+        let lib = a.library.unwrap();
+        assert_eq!(
+            lib.palace,
+            PathBuf::from("/home/kostadis/.local/share/hypostasis/library/palace")
+        );
+        assert_eq!(
+            lib.source_root,
+            PathBuf::from("/mnt/g/My Drive/DriveThru/Dungeon Masters Guild")
+        );
+        assert_eq!(a.mempalace_root, PathBuf::from("/home/kostadis/.mempalace"));
+    }
+
+    #[test]
+    fn no_library_block_is_not_a_parse_failure() {
+        let a = parse_str(NO_LIBRARY).unwrap();
+        assert_eq!(a.library, Err("no library: block".to_string()));
+    }
+
+    #[test]
+    fn relative_library_palace_is_reported() {
+        let a = parse_str(&FIXTURE.replace(
+            "palace: ~/.local/share/hypostasis/library/palace",
+            "palace: relative",
+        ))
+        .unwrap();
+        assert_eq!(
+            a.library,
+            Err("library.palace must be an absolute path".to_string())
+        );
+    }
+
+    #[test]
+    fn missing_library_keys_are_named() {
+        let a = parse_str(&FIXTURE.replace(
+            "  source_root: \"/mnt/g/My Drive/DriveThru/Dungeon Masters Guild\"\n",
+            "",
+        ))
+        .unwrap();
+        assert_eq!(a.library, Err("library.source_root is missing".to_string()));
+    }
+
+    #[test]
+    fn non_string_env_value_fails_the_parse() {
+        let e = parse_str(&FIXTURE.replace("MEMPALACE_BACKEND: turbovec", "MEMPALACE_BACKEND: 1"))
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("env.MEMPALACE_BACKEND must be a string"), "{e}");
+    }
+
+    #[test]
+    fn mempalace_root_defaults() {
+        let a = parse_str(&FIXTURE.replace("  mempalace: ~/.mempalace\n", "")).unwrap();
+        assert_eq!(a.mempalace_root, PathBuf::from("/home/kostadis/.mempalace"));
     }
 }
