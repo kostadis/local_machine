@@ -244,7 +244,7 @@ fn stop_never_touches_a_foreign_service() {
 
 // ---------------------------------------------------------------- the library palace (003 US3)
 
-const LIB_STATUS: &str = "/home/kostadis/.venvs/main/bin/library status --json";
+const LIB_STATUS: &str = "/home/kostadis/.venvs/main/bin/library status --json --config /home/kostadis/.config/hypostasis/hypostasis.yaml";
 const AUTH: &str = "/home/kostadis/.config/hypostasis/hypostasis.yaml";
 const NO_LIBRARY: &str = include_str!("fixtures/authority-no-library.yaml");
 

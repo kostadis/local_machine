@@ -44,7 +44,7 @@ What `library status --json` says, run with the authority env.
 | # | Precondition | Failure reason | Fix shown |
 |---|---|---|---|
 | P1 | Authority has a `library:` block with `palace` and `source_root` | `not configured (no library: block)` | add the block to the authority and to `authority_source` |
-| P2 | `<venv>/bin/library` exists | `needs the library command from CampaignGenerator` | `local-machine hypostasis setup` |
+| P2 | `<venv>/bin/library` exists | `needs the library command from CampaignGenerator` | `local-machine hypostasis setup` (the library palace step reinstalls the components via `hypostasis install --config <authority>`, then re-checks; still missing is a failure: `'hypostasis install' did not provide it — check that CampaignGenerator declares the library script`). `status`/`start` only report it. |
 | P3 | `rpg_library_db` exists | `needs the rpg library DB` | `local-machine hypostasis setup` (restores it) |
 | P4 | `source_root` is a readable directory | `source folder <p> not readable` | `mount <p>, then run setup` |
 | P5 | palace path passes the live-palace guard | `<palace> overlaps live palace <q>` | change `library.palace` in the authority |

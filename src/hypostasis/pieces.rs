@@ -394,21 +394,27 @@ impl Step for Components<'_> {
         let Some(a) = self.ctx.authority(sys)? else {
             bail!("{} does not exist", self.ctx.cfg.authority.display());
         };
-        let cmd = Cmd::new(&path_str(&a.bin("hypostasis"))).args([
-            "install",
-            "--config",
-            &path_str(&a.path),
-        ]);
-        let out = sys.run(&cmd)?;
-        for line in out.stdout.lines() {
-            say!("  | {line}");
-        }
-        if !out.success() {
-            let detail = out.stderr.trim();
-            bail!("`{}` exited with {}:\n{detail}", cmd.line(), out.code);
-        }
-        Ok(())
+        run_install(sys, &a)
     }
+}
+
+/// `hypostasis install --config <authority>`: the one way components get (re)installed.
+pub fn install_cmd(a: &Authority) -> Cmd {
+    Cmd::new(&path_str(&a.bin("hypostasis"))).args(["install", "--config", &path_str(&a.path)])
+}
+
+/// Run hypostasis's installer, echoing its output; a non-zero exit is an error.
+pub fn run_install(sys: &dyn System, a: &Authority) -> Result<()> {
+    let cmd = install_cmd(a);
+    let out = sys.run(&cmd)?;
+    for line in out.stdout.lines() {
+        say!("  | {line}");
+    }
+    if !out.success() {
+        let detail = out.stderr.trim();
+        bail!("`{}` exited with {}:\n{detail}", cmd.line(), out.code);
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------

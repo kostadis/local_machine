@@ -10,6 +10,8 @@ CampaignGenerator `specs/044-library-passage-search/contracts/cli.md` and
 ## Every `library` call
 
 - Program: `<authority venv>/bin/library`.
+- Arguments: `<subcommand...> --config <authority>`, where `<authority>` is the path of the
+  authority file local-machine read (the `authority:` path in its config), on every call.
 - Environment: the parent environment, plus every `env:` key from the authority set on the
   child (overriding the shell's value).
 - Captured output, except `library build`, which inherits the terminal.
