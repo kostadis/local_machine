@@ -12,6 +12,8 @@ use super::{Cmd, Output, PathKind, System};
 /// Runs when a command line is issued, to change what later checks see.
 pub type Effect = Box<dyn Fn(&FakeSystem)>;
 /// Like [`Effect`], given the full command line.
+/// A probed `(host, port)`.
+pub type HostPort = (String, u16);
 pub type LineEffect = Box<dyn Fn(&FakeSystem, &str)>;
 /// Computes a command's output from the fake's current state.
 pub type Responder = Box<dyn Fn(&FakeSystem, &str) -> Output>;
@@ -31,6 +33,12 @@ pub struct FakeSystem {
     /// Command-line prefix → output computed from state; checked before everything else.
     pub responders: RefCell<Vec<(String, std::rc::Rc<Responder>)>>,
     pub calls: RefCell<Vec<String>>,
+    /// Environment of each recorded command, parallel to `calls`.
+    pub envs: RefCell<Vec<Vec<(String, String)>>>,
+    /// (host, port) → answers to successive `http_status_at` probes; the last one repeats.
+    pub http_at: RefCell<HashMap<HostPort, VecDeque<Option<u16>>>>,
+    /// Scripted symlinks: path → its canonical form.
+    pub canon: RefCell<HashMap<PathBuf, PathBuf>>,
     pub files: RefCell<HashMap<PathBuf, String>>,
     pub dirs: RefCell<HashMap<PathBuf, u32>>,
     pub passwords: RefCell<VecDeque<String>>,
@@ -117,6 +125,33 @@ impl FakeSystem {
             .insert(port, answers.iter().copied().collect());
     }
 
+    /// Scripted answers for successive probes of `host:port`; the last one repeats.
+    pub fn set_http_at(&self, host: &str, port: u16, answers: &[Option<u16>]) {
+        self.http_at
+            .borrow_mut()
+            .insert((host.to_string(), port), answers.iter().copied().collect());
+    }
+
+    /// Script `from` to resolve to `to` (a symlink).
+    pub fn set_canonical(&self, from: &str, to: &str) {
+        self.canon
+            .borrow_mut()
+            .insert(PathBuf::from(from), PathBuf::from(to));
+    }
+
+    /// The environment of the last `run` whose line starts with `line_prefix`.
+    pub fn env_of(&self, line_prefix: &str) -> Option<Vec<(String, String)>> {
+        let calls = self.calls.borrow();
+        let envs = self.envs.borrow();
+        // `calls` also holds non-run records, so match on the run records only.
+        calls
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, c)| c.starts_with(line_prefix))
+            .and_then(|(i, _)| envs.get(i).cloned())
+    }
+
     pub fn set_euid(&self, uid: u32) {
         self.euid.set(uid);
     }
@@ -131,10 +166,16 @@ impl FakeSystem {
 
     pub fn clear_calls(&self) {
         self.calls.borrow_mut().clear();
+        self.envs.borrow_mut().clear();
     }
 
     fn record(&self, line: String) {
+        self.record_env(line, Vec::new());
+    }
+
+    fn record_env(&self, line: String, env: Vec<(String, String)>) {
         self.calls.borrow_mut().push(line);
+        self.envs.borrow_mut().push(env);
     }
 
     /// Whether the privilege notice prompted (`sudo -v`). Panics if any command ran with
@@ -185,7 +226,7 @@ fn is_notice(call: &str) -> bool {
 impl System for FakeSystem {
     fn run(&self, cmd: &Cmd) -> Result<Output> {
         let line = cmd.line();
-        self.record(line.clone());
+        self.record_env(line.clone(), cmd.env.clone());
         let responder = self
             .responders
             .borrow()
@@ -339,6 +380,31 @@ impl System for FakeSystem {
         }
     }
 
+    fn http_status_at(
+        &self,
+        host: &str,
+        port: u16,
+        _path: &str,
+        _timeout: Duration,
+    ) -> Option<u16> {
+        let mut http = self.http_at.borrow_mut();
+        let answers = http.get_mut(&(host.to_string(), port))?;
+        if answers.len() > 1 {
+            answers.pop_front().flatten()
+        } else {
+            answers.front().copied().flatten()
+        }
+    }
+
+    fn canonical(&self, path: &Path) -> Option<PathBuf> {
+        if let Some(to) = self.canon.borrow().get(path) {
+            return Some(to.clone());
+        }
+        let exists =
+            self.files.borrow().contains_key(path) || self.dirs.borrow().contains_key(path);
+        exists.then(|| path.to_path_buf())
+    }
+
     fn effective_uid(&self) -> u32 {
         self.euid.get()
     }
@@ -348,4 +414,50 @@ impl System for FakeSystem {
     }
 
     fn sleep(&self, _duration: Duration) {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn env_of_returns_last_matching_call_env() {
+        let sys = FakeSystem::new("u");
+        sys.run(&Cmd::new("tool").args(["a"]).env("K", "1"))
+            .unwrap();
+        sys.write_user_file(Path::new("/x"), "c").unwrap();
+        sys.run(&Cmd::new("tool").args(["b"]).env("K", "2"))
+            .unwrap();
+        assert_eq!(
+            sys.env_of("tool"),
+            Some(vec![("K".to_string(), "2".to_string())])
+        );
+        assert_eq!(
+            sys.env_of("tool a"),
+            Some(vec![("K".to_string(), "1".to_string())])
+        );
+        assert_eq!(sys.env_of("nope"), None);
+    }
+
+    #[test]
+    fn http_at_is_scripted_per_host_and_port() {
+        let sys = FakeSystem::new("u");
+        let t = Duration::from_secs(1);
+        sys.set_http_at("h", 80, &[None, Some(200)]);
+        assert_eq!(sys.http_status_at("h", 80, "/", t), None);
+        assert_eq!(sys.http_status_at("h", 80, "/", t), Some(200));
+        assert_eq!(sys.http_status_at("h", 80, "/", t), Some(200));
+        assert_eq!(sys.http_status_at("other", 80, "/", t), None);
+        assert_eq!(sys.http_status(80, "/", t), None);
+    }
+
+    #[test]
+    fn canonical_identity_for_existing_scripted_links_else_none() {
+        let sys = FakeSystem::new("u");
+        sys.set_dir("/a", 1000);
+        assert_eq!(sys.canonical(Path::new("/a")), Some(PathBuf::from("/a")));
+        assert_eq!(sys.canonical(Path::new("/missing")), None);
+        sys.set_canonical("/link", "/a");
+        assert_eq!(sys.canonical(Path::new("/link")), Some(PathBuf::from("/a")));
+    }
 }

@@ -99,12 +99,17 @@ pub fn run(ctx: &Context, sys: &dyn System) -> Result<u8> {
             failed += 1;
         }
     }
+    // The library check never blocks a service from starting (FR-009).
+    let code = super::library::library_line(ctx, sys, &authority);
     if failed > 0 {
         return Err(ExitError::new(
             ExitError::FAILED,
             format!("start: {failed} of 3 services did not start"),
         )
         .into());
+    }
+    if code != 0 {
+        return Err(ExitError::new(code, "start: library palace unavailable").into());
     }
     Ok(0)
 }

@@ -5,6 +5,7 @@ pub mod authority;
 pub mod checkout;
 pub mod config;
 pub mod firewall;
+pub mod library;
 pub mod pieces;
 pub mod restore;
 pub mod services;

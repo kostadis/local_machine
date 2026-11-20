@@ -298,6 +298,14 @@ impl System for NoPrompt<'_> {
         self.0.http_status(port, path, timeout)
     }
 
+    fn http_status_at(&self, host: &str, port: u16, path: &str, timeout: Duration) -> Option<u16> {
+        self.0.http_status_at(host, port, path, timeout)
+    }
+
+    fn canonical(&self, path: &Path) -> Option<PathBuf> {
+        self.0.canonical(path)
+    }
+
     fn effective_uid(&self) -> u32 {
         self.0.effective_uid()
     }

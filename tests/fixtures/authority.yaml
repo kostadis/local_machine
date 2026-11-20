@@ -35,6 +35,12 @@ env:
   MEMPALACE_EMBEDDING_MODEL: qwen3-embedding:0.6b
   MEMPALACE_EMBEDDING_ENDPOINT: http://192.168.56.1:11434
 
+library:
+  palace: ~/.local/share/hypostasis/library/palace
+  work_dir: ~/.local/share/hypostasis/library
+  source_root: "/mnt/g/My Drive/DriveThru/Dungeon Masters Guild"
+  selection: {book_ids: [2443, 2475]}
+
 services:
   dgx:
     url: http://192.168.1.121:8001/v1

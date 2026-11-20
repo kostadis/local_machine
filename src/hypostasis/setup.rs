@@ -13,6 +13,7 @@ use super::Context;
 use super::authority::Authority;
 use super::checkout::{self, CheckoutStep, Found};
 use super::firewall::FirewallStep;
+use super::library::LibraryPalace;
 use super::pieces::{
     AuthorityFile, ComponentPaths, Components, Hypostasis, Install, Linger, Packages, ServicesVenv,
     Unit, Uv, Venv,
@@ -48,7 +49,8 @@ pub fn software_steps(ctx: &Context) -> Vec<Box<dyn Step + '_>> {
     steps
 }
 
-/// Every restore, last (FR-010d). Palaces need the authority's campaign list.
+/// Every restore, last (FR-010d), then the library palace build. Palaces need the
+/// authority's campaign list.
 pub fn restore_steps<'a>(
     ctx: &'a Context,
     sys: &dyn System,
@@ -62,6 +64,8 @@ pub fn restore_steps<'a>(
     for campaign in authority.campaign_names(sys) {
         steps.push(Box::new(Palace::new(ctx, &campaign)));
     }
+    // The library palace is built from the library DB and the DMG folder; last (R10).
+    steps.push(Box::new(LibraryPalace::new(ctx)));
     steps
 }
 
