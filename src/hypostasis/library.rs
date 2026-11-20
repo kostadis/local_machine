@@ -186,6 +186,88 @@ pub fn embedder_answers(sys: &dyn System, a: &Authority) -> Option<bool> {
 
 const SETUP: &str = "local-machine hypostasis setup";
 
+/// P1 (library keys present) and P2 (library command installed): `(reason, fix)` on failure.
+pub fn p1_p2(
+    ctx: &Context,
+    sys: &dyn System,
+    a: &Authority,
+) -> Result<LibraryKeys, (String, String)> {
+    let keys = match &a.library {
+        Ok(k) => k.clone(),
+        Err(reason) => {
+            return Err((
+                format!(
+                    "not configured ({reason} in {})",
+                    ctx.cfg.authority.display()
+                ),
+                format!("add it there and to {}", ctx.cfg.authority_source.display()),
+            ));
+        }
+    };
+    if sys.path_kind(&a.bin("library")) == PathKind::Missing {
+        return Err((
+            "needs the library command from CampaignGenerator".to_string(),
+            format!("run '{SETUP}'"),
+        ));
+    }
+    Ok(keys)
+}
+
+/// Print the `start` library line; returns the mapped exit code (0 when available).
+pub fn library_line(ctx: &Context, sys: &dyn System, a: &Authority) -> u8 {
+    if let Err((reason, fix)) = p1_p2(ctx, sys, a) {
+        say!("error: library palace: unavailable — {reason} — {fix}");
+        return if a.library.is_err() { 3 } else { 4 };
+    }
+    let state = observe(sys, a);
+    let code = state.exit_code();
+    match state {
+        LibraryState::Ready { .. } => match (embedder(a), embedder_answers(sys, a)) {
+            (Some(e), Some(true)) => {
+                say!(
+                    "ok: library palace (available; embedder {} answering)",
+                    e.url
+                );
+                0
+            }
+            (Some(e), _) => {
+                say!(
+                    "error: library palace: unavailable — embedder {} not answering",
+                    e.url
+                );
+                1
+            }
+            (None, _) => {
+                match a
+                    .env
+                    .iter()
+                    .find(|(k, _)| k == "MEMPALACE_EMBEDDING_ENDPOINT")
+                {
+                    Some((_, url)) => say!(
+                        "unknown: library palace: available; embedder {url} (cannot probe https)"
+                    ),
+                    None => say!("ok: library palace (available)"),
+                }
+                0
+            }
+        },
+        LibraryState::NotBuilt(_) => {
+            say!("error: library palace: unavailable — not built — run '{SETUP}'");
+            code
+        }
+        LibraryState::NotConfigured(m) => {
+            say!("error: library palace: unavailable — not configured: {m}");
+            code
+        }
+        LibraryState::EmbedderMismatch(m)
+        | LibraryState::LivePalace(m)
+        | LibraryState::Failed(m) => {
+            say!("error: library palace: unavailable — {m}");
+            code
+        }
+    }
+}
+
 /// The `library palace` setup piece: build the DMG library palace when it is missing, and
 /// remove a half-built one if the build fails (specs/003-dmsguild-library-palace R5, R6, R10).
 pub struct LibraryPalace<'a> {
@@ -204,21 +286,7 @@ impl<'a> LibraryPalace<'a> {
 
     /// P1..P5 in order; the first failure is `<reason> — <fix>`.
     fn preconditions(&self, sys: &dyn System, a: &Authority) -> Result<LibraryKeys, String> {
-        let keys = match &a.library {
-            Ok(k) => k.clone(),
-            Err(reason) => {
-                return Err(format!(
-                    "not configured ({reason} in {}) — add it there and to {}",
-                    self.ctx.cfg.authority.display(),
-                    self.ctx.cfg.authority_source.display()
-                ));
-            }
-        };
-        if sys.path_kind(&a.bin("library")) == PathKind::Missing {
-            return Err(format!(
-                "needs the library command from CampaignGenerator — run '{SETUP}'"
-            ));
-        }
+        let keys = p1_p2(self.ctx, sys, a).map_err(|(r, f)| format!("{r} — {f}"))?;
         if sys.path_kind(&a.rpg_library_db) == PathKind::Missing {
             return Err(format!(
                 "needs the rpg library DB — run '{SETUP}' (restores it)"

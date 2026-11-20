@@ -241,3 +241,119 @@ fn stop_never_touches_a_foreign_service() {
     );
     no_root(&m);
 }
+
+// ---------------------------------------------------------------- the library palace (003 US3)
+
+const LIB_STATUS: &str = "/home/kostadis/.venvs/main/bin/library status --json";
+const AUTH: &str = "/home/kostadis/.config/hypostasis/hypostasis.yaml";
+const NO_LIBRARY: &str = include_str!("fixtures/authority-no-library.yaml");
+
+fn services_started(lines: &[String]) {
+    for (name, port) in SERVICES {
+        assert!(
+            has_line(
+                lines,
+                &format!("changed: {name} (running at http://192.168.1.85:{port})")
+            ),
+            "{lines:#?}"
+        );
+    }
+}
+
+fn library_calls_are_reads_only(m: &Machine) {
+    for c in m.calls_matching("/bin/library") {
+        assert_eq!(c, LIB_STATUS, "{:#?}", m.sys.calls());
+    }
+}
+
+fn started() -> Machine {
+    let m = Machine::set_up();
+    m.services_start_cleanly();
+    m
+}
+
+#[test]
+fn start_reports_an_available_library() {
+    let m = started();
+    let (code, lines) = start(&m);
+    assert_eq!(code, Ok(0), "{lines:#?}");
+    services_started(&lines);
+    assert!(has_line(
+        &lines,
+        "ok: library palace (available; embedder http://192.168.56.1:11434 answering)"
+    ));
+    library_calls_are_reads_only(&m);
+    no_root(&m);
+}
+
+#[test]
+fn start_with_embedder_down_still_starts_services_and_exits_1() {
+    let m = started();
+    m.sys.set_http_at("192.168.56.1", 11434, &[None]);
+    let (code, lines) = start(&m);
+    assert_eq!(code, Err(1), "{lines:#?}");
+    services_started(&lines);
+    assert!(has_line(
+        &lines,
+        "error: library palace: unavailable — embedder http://192.168.56.1:11434 not answering"
+    ));
+    library_calls_are_reads_only(&m);
+    no_root(&m);
+}
+
+#[test]
+fn start_with_library_not_built_still_starts_services_and_exits_4() {
+    let m = started();
+    m.sys.dirs.borrow_mut().remove(std::path::Path::new(PALACE));
+    let (code, lines) = start(&m);
+    assert_eq!(code, Err(4), "{lines:#?}");
+    services_started(&lines);
+    assert!(has_line(
+        &lines,
+        "error: library palace: unavailable — not built — run 'local-machine hypostasis setup'"
+    ));
+    library_calls_are_reads_only(&m);
+    no_root(&m);
+}
+
+#[test]
+fn a_failed_service_outranks_the_library_code() {
+    let m = started();
+    m.sys.dirs.borrow_mut().remove(std::path::Path::new(PALACE));
+    m.sys.set_http(8000, &[Some(200)]); // foreign rpg-lib: that service fails
+    let (code, lines) = start(&m);
+    assert_eq!(code, Err(1), "{lines:#?}");
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.starts_with("error: library palace: unavailable")),
+        "{lines:#?}"
+    );
+    no_root(&m);
+}
+
+#[test]
+fn start_without_a_library_block_exits_3_after_the_services() {
+    let m = started();
+    m.sys.set_file(AUTH, NO_LIBRARY);
+    let (code, lines) = start(&m);
+    assert_eq!(code, Err(3), "{lines:#?}");
+    services_started(&lines);
+    assert!(
+        lines.iter().any(|l| l
+            .starts_with("error: library palace: unavailable — not configured (no library: block")),
+        "{lines:#?}"
+    );
+    assert!(m.calls_matching("/bin/library").is_empty());
+    no_root(&m);
+}
+
+#[test]
+fn stop_makes_no_library_call_and_prints_no_library_line() {
+    let m = running();
+    let (code, lines) = stop(&m);
+    assert_eq!(code, Ok(0), "{lines:#?}");
+    assert!(m.calls_matching("/bin/library").is_empty());
+    assert!(lines.iter().all(|l| !l.contains("library")), "{lines:#?}");
+    no_root(&m);
+}

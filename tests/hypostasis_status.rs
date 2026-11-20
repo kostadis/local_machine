@@ -189,3 +189,179 @@ fn flexai_data_waits_for_the_services_venv_instead_of_blaming_the_backup() {
         );
     }
 }
+
+// ---------------------------------------------------------------- the library palace (003 US2)
+
+const LIB_STATUS: &str = "/home/kostadis/.venvs/main/bin/library status --json";
+const AUTH: &str = "/home/kostadis/.config/hypostasis/hypostasis.yaml";
+
+/// Only `library status --json` may reach the library binary, and it is reported once.
+fn only_status_call(m: &Machine) {
+    for c in m.calls_matching("/bin/library") {
+        assert_eq!(c, LIB_STATUS, "{:#?}", m.sys.calls());
+    }
+    assert!(!m.sys.prompted());
+}
+
+fn library_lines(lines: &[String]) -> Vec<&String> {
+    lines
+        .iter()
+        .filter(|l| l.contains("library palace") && !l.starts_with("hypostasis:"))
+        .collect()
+}
+
+#[test]
+fn library_ready_is_one_ok_line() {
+    let m = running();
+    let out = Output::ok(r#"{"books": 2, "stale": [], "index_bytes": 46000000}"#);
+    m.sys.respond_fn(LIB_STATUS, move |_, _| out.clone());
+    let (code, lines) = status(&m);
+    assert_eq!(code, Ok(0), "{lines:#?}");
+    assert_eq!(
+        library_lines(&lines),
+        vec!["ok: library palace (2 books, 46 MB)"]
+    );
+    assert_eq!(lines[0], "hypostasis: set up; 3 of 3 services running");
+    only_status_call(&m);
+}
+
+#[test]
+fn library_ready_with_stale_notes_refresh() {
+    let m = running();
+    let out = Output::ok(r#"{"books": 2, "stale": ["a","b","c"], "index_bytes": 46000000}"#);
+    m.sys.respond_fn(LIB_STATUS, move |_, _| out.clone());
+    let (code, lines) = status(&m);
+    assert_eq!(code, Ok(0), "{lines:#?}");
+    assert_eq!(
+        library_lines(&lines),
+        vec![
+            "ok: library palace (2 books, 46 MB)",
+            "note: library palace: 3 books stale — run '/home/kostadis/.venvs/main/bin/library refresh'"
+        ]
+    );
+    only_status_call(&m);
+}
+
+#[test]
+fn library_not_ready_states_map_to_exit_codes() {
+    let live = format!(
+        "error: library palace: overlaps a live palace (inside live) — change library.palace in {AUTH}"
+    );
+    let cases: [(u8, &str, u8, &str); 4] = [
+        (
+            3,
+            "no config",
+            3,
+            "missing: library palace (not configured: no config)",
+        ),
+        (
+            4,
+            "library not built",
+            4,
+            "missing: library palace (not built) — run 'local-machine hypostasis setup'",
+        ),
+        (
+            5,
+            "model differs",
+            1,
+            "error: library palace: embedder mismatch (model differs)",
+        ),
+        (6, "inside live", 1, &live),
+    ];
+    for (lib_code, msg, exit, line) in cases {
+        let m = running();
+        let out = Output::fail(lib_code as i32, msg);
+        m.sys.respond_fn(LIB_STATUS, move |_, _| out.clone());
+        let (code, lines) = status(&m);
+        assert_eq!(code, Ok(exit), "{lib_code}: {lines:#?}");
+        assert_eq!(library_lines(&lines), vec![line], "{lib_code}");
+        assert_eq!(
+            lines[0],
+            "hypostasis: set up; library palace not ready; 3 of 3 services running"
+        );
+        only_status_call(&m);
+    }
+}
+
+#[test]
+fn library_other_failure_is_exit_1() {
+    let m = running();
+    let out = Output::fail(7, "kaboom");
+    m.sys.respond_fn(LIB_STATUS, move |_, _| out.clone());
+    let (code, lines) = status(&m);
+    assert_eq!(code, Ok(1), "{lines:#?}");
+    assert_eq!(
+        library_lines(&lines),
+        vec!["error: library palace: library status failed: kaboom"]
+    );
+    only_status_call(&m);
+}
+
+#[test]
+fn library_other_piece_missing_outranks_library_problem() {
+    let m = running();
+    let p = "/home/kostadis/src/turbovecdb";
+    m.sys.dirs.borrow_mut().retain(|d, _| !d.starts_with(p));
+    m.sys.files.borrow_mut().retain(|d, _| !d.starts_with(p));
+    let out = Output::fail(3, "no config");
+    m.sys.respond_fn(LIB_STATUS, move |_, _| out.clone());
+    let (code, lines) = status(&m);
+    assert_eq!(code, Ok(4), "{lines:#?}");
+    assert!(
+        lines[0].starts_with("hypostasis: not set up;"),
+        "{lines:#?}"
+    );
+    only_status_call(&m);
+}
+
+#[test]
+fn library_mismatch_outranks_stopped_services_and_ready_does_not() {
+    let m = Machine::set_up();
+    m.services_start_cleanly();
+    let out = Output::fail(5, "model differs");
+    m.sys.respond_fn(LIB_STATUS, move |_, _| out.clone());
+    let (code, lines) = status(&m);
+    assert_eq!(code, Ok(1), "{lines:#?}");
+    only_status_call(&m);
+
+    let m = Machine::set_up();
+    m.services_start_cleanly();
+    let (code, lines) = status(&m);
+    assert_eq!(code, Ok(5), "{lines:#?}");
+    assert_eq!(lines[0], "hypostasis: set up; 0 of 3 services running");
+    only_status_call(&m);
+}
+
+#[test]
+fn library_missing_command_is_reported_without_running_it() {
+    let m = running();
+    m.sys
+        .files
+        .borrow_mut()
+        .remove(std::path::Path::new(LIB_BIN));
+    let (code, lines) = status(&m);
+    assert_eq!(code, Ok(4), "{lines:#?}");
+    assert_eq!(
+        library_lines(&lines),
+        vec![
+            "missing: library palace (needs the library command from CampaignGenerator) — run 'local-machine hypostasis setup'"
+        ]
+    );
+    assert!(m.calls_matching("/bin/library").is_empty());
+}
+
+#[test]
+fn library_without_authority_makes_no_library_call() {
+    let m = running();
+    m.sys.files.borrow_mut().remove(std::path::Path::new(AUTH));
+    let (code, lines) = status(&m);
+    assert_eq!(code, Ok(4), "{lines:#?}");
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.starts_with("missing: restores (needs the authority file")),
+        "{lines:#?}"
+    );
+    assert!(library_lines(&lines).is_empty(), "{lines:#?}");
+    assert!(m.calls_matching("/bin/library").is_empty());
+}

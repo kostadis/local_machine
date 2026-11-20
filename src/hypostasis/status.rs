@@ -11,6 +11,8 @@ use crate::system::System;
 use crate::system::action::{Check, NoPrompt, Step};
 
 use super::Context;
+use super::authority::Authority;
+use super::library::{self, LibraryState};
 use super::restore;
 use super::services::{self, LocalService};
 use super::setup::{restore_steps, software_steps};
@@ -82,6 +84,10 @@ pub fn run(ctx: &Context, sys: &dyn System) -> Result<u8> {
     match &authority {
         Some(a) => {
             for step in restore_steps(ctx, &look, a) {
+                // The library is reported once, by its own section below.
+                if step.name() == "library palace" {
+                    continue;
+                }
                 pieces.report(ctx, &look, step.as_ref())?;
             }
         }
@@ -94,6 +100,12 @@ pub fn run(ctx: &Context, sys: &dyn System) -> Result<u8> {
         }
     }
 
+    let library = authority.as_ref().map(|a| library_section(ctx, &look, a));
+    let library_code = library.as_ref().map_or(0, |(c, _)| *c);
+    if let Some((_, lines)) = library {
+        pieces.lines.extend(lines);
+    }
+
     let svcs: Vec<LocalService> = match &authority {
         Some(a) => services::table(ctx, a),
         None => Vec::new(),
@@ -103,10 +115,12 @@ pub fn run(ctx: &Context, sys: &dyn System) -> Result<u8> {
 
     say!(
         "hypostasis: {}; {running} of 3 services running",
-        if pieces.missing == 0 {
-            "set up"
-        } else {
+        if pieces.missing > 0 {
             "not set up"
+        } else if library_code != 0 {
+            "set up; library palace not ready"
+        } else {
+            "set up"
         }
     );
     for line in &pieces.lines {
@@ -153,6 +167,8 @@ pub fn run(ctx: &Context, sys: &dyn System) -> Result<u8> {
 
     Ok(if pieces.missing > 0 {
         ExitError::NOT_SET_UP
+    } else if library_code != 0 {
+        library_code
     } else if running < 3 {
         ExitError::NOT_AVAILABLE
     } else {
@@ -174,4 +190,55 @@ fn observe(sys: &dyn System, svc: &LocalService) -> State {
     } else {
         State::Stopped
     }
+}
+
+/// The library lines and the exit code they imply. Runs only `library status --json`.
+fn library_section(ctx: &Context, sys: &dyn System, a: &Authority) -> (u8, Vec<String>) {
+    if let Err((reason, fix)) = library::p1_p2(ctx, sys, a) {
+        let code = if a.library.is_err() {
+            ExitError::NOT_CONFIGURED
+        } else {
+            ExitError::NOT_SET_UP
+        };
+        return (
+            code,
+            vec![format!("missing: library palace ({reason}) — {fix}")],
+        );
+    }
+    let state = library::observe(sys, a);
+    let code = state.exit_code();
+    let mut lines = Vec::new();
+    match state {
+        LibraryState::Ready {
+            books,
+            stale,
+            index_bytes,
+        } => {
+            let mb = (index_bytes as f64 / 1_000_000.0).round() as u64;
+            lines.push(format!("ok: library palace ({books} books, {mb} MB)"));
+            if stale > 0 {
+                lines.push(format!(
+                    "note: library palace: {stale} books stale — run '{} refresh'",
+                    a.bin("library").display()
+                ));
+            }
+        }
+        LibraryState::NotConfigured(m) => {
+            lines.push(format!("missing: library palace (not configured: {m})"));
+        }
+        LibraryState::NotBuilt(_) => {
+            lines.push(format!("missing: library palace (not built) — {SETUP}"))
+        }
+        LibraryState::EmbedderMismatch(m) => {
+            lines.push(format!("error: library palace: embedder mismatch ({m})"));
+        }
+        LibraryState::LivePalace(m) => lines.push(format!(
+            "error: library palace: overlaps a live palace ({m}) — change library.palace in {}",
+            ctx.cfg.authority.display()
+        )),
+        LibraryState::Failed(m) => {
+            lines.push(format!("error: library palace: library status failed: {m}"));
+        }
+    }
+    (code, lines)
 }

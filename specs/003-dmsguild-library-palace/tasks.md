@@ -76,14 +76,14 @@ the end (T038–T039); anything after that becomes a GitHub issue (T040), not a 
 
 ### Tests
 
-- [ ] T024 [P] [US2] In tests/hypostasis_status.rs, one test per state with every other piece present and all services running: Ready → `ok: library palace (2 books, 46 MB)`, exit 0; Ready with 3 stale → plus `note: library palace: 3 books stale — run '<venv>/bin/library refresh'`, exit 0; NotConfigured → exit 3; NotBuilt → exit 4; EmbedderMismatch → exit 1; LivePalace → exit 1; other exit 7 → exit 1. Each asserts `prompted()` false and no call other than `library status --json` to the library binary
-- [ ] T025 [P] [US2] In tests/hypostasis_status.rs, precedence: another piece missing + library NotConfigured → exit 4; library EmbedderMismatch + services stopped → exit 1; library Ready + services stopped → exit 5; authority missing → no library call, existing `missing: restores` line unchanged
+- [X] T024 [P] [US2] In tests/hypostasis_status.rs, one test per state with every other piece present and all services running: Ready → `ok: library palace (2 books, 46 MB)`, exit 0; Ready with 3 stale → plus `note: library palace: 3 books stale — run '<venv>/bin/library refresh'`, exit 0; NotConfigured → exit 3; NotBuilt → exit 4; EmbedderMismatch → exit 1; LivePalace → exit 1; other exit 7 → exit 1. Each asserts `prompted()` false and no call other than `library status --json` to the library binary
+- [X] T025 [P] [US2] In tests/hypostasis_status.rs, precedence: another piece missing + library NotConfigured → exit 4; library EmbedderMismatch + services stopped → exit 1; library Ready + services stopped → exit 5; authority missing → no library call, existing `missing: restores` line unchanged
 
 ### Implementation
 
-- [ ] T026 [US2] In src/hypostasis/status.rs stop reporting `LibraryPalace` through the generic `Pieces::report` (filter it out of `restore_steps` output, or have `restore_steps` take a flag), and add a library section after the restore lines that calls `library::observe` (via `NoPrompt`) and prints the lines from contracts/cli.md `## status`; `index_bytes` shown as MB rounded; P1/P2 failures reported as `missing:` without running the binary
-- [ ] T027 [US2] In src/hypostasis/status.rs compute the exit per research R9: `pieces.missing > 0` → 4; else library `exit_code()` if non-zero; else services < 3 → 5; else 0. Update the header line so a library-only problem reads `hypostasis: set up; library palace not ready; N of 3 services running`
-- [ ] T028 [US2] Make T024–T025 pass; `cargo test`, clippy green
+- [X] T026 [US2] In src/hypostasis/status.rs stop reporting `LibraryPalace` through the generic `Pieces::report` (filter it out of `restore_steps` output, or have `restore_steps` take a flag), and add a library section after the restore lines that calls `library::observe` (via `NoPrompt`) and prints the lines from contracts/cli.md `## status`; `index_bytes` shown as MB rounded; P1/P2 failures reported as `missing:` without running the binary
+- [X] T027 [US2] In src/hypostasis/status.rs compute the exit per research R9: `pieces.missing > 0` → 4; else library `exit_code()` if non-zero; else services < 3 → 5; else 0. Update the header line so a library-only problem reads `hypostasis: set up; library palace not ready; N of 3 services running`
+- [X] T028 [US2] Make T024–T025 pass; `cargo test`, clippy green
 
 **Checkpoint**: US1 + US2 make the feature usable end to end (build, then see it).
 
@@ -95,13 +95,13 @@ the end (T038–T039); anything after that becomes a GitHub issue (T040), not a 
 
 ### Tests
 
-- [ ] T029 [P] [US3] In tests/hypostasis_services.rs: Ready + embedder 200 → services started, `ok: library palace (available; embedder <url> answering)`, exit 0; Ready + embedder no answer → services started, `error: library palace: unavailable — embedder <url> not answering`, exit 1; NotBuilt → services started, exit 4; a service fails + library NotBuilt → exit 1; library absent from the authority → exit 3 after services start; `prompted()` false; no `library build`/`refresh` call ever
-- [ ] T030 [P] [US3] In tests/hypostasis_services.rs: `stop` makes no call to the library binary and prints no library line
+- [X] T029 [P] [US3] In tests/hypostasis_services.rs: Ready + embedder 200 → services started, `ok: library palace (available; embedder <url> answering)`, exit 0; Ready + embedder no answer → services started, `error: library palace: unavailable — embedder <url> not answering`, exit 1; NotBuilt → services started, exit 4; a service fails + library NotBuilt → exit 1; library absent from the authority → exit 3 after services start; `prompted()` false; no `library build`/`refresh` call ever
+- [X] T030 [P] [US3] In tests/hypostasis_services.rs: `stop` makes no call to the library binary and prints no library line
 
 ### Implementation
 
-- [ ] T031 [US3] In src/hypostasis/start.rs, after the service loop in `run`, add `library_line(ctx, sys, &authority) -> u8` (in src/hypostasis/library.rs) that checks P1, `observe`, and `embedder_answers`, prints per contracts/cli.md `## start`, and returns the mapped code (embedder down → 1, https → `unknown:` line and treated as answering). `run` returns: any service failed → existing FAILED error; else non-zero library code → `ExitError::new(code, "start: library palace unavailable")`; else 0. Services are never skipped because of the library (FR-009)
-- [ ] T032 [US3] Make T029–T030 pass; `cargo test`, clippy green
+- [X] T031 [US3] In src/hypostasis/start.rs, after the service loop in `run`, add `library_line(ctx, sys, &authority) -> u8` (in src/hypostasis/library.rs) that checks P1, `observe`, and `embedder_answers`, prints per contracts/cli.md `## start`, and returns the mapped code (embedder down → 1, https → `unknown:` line and treated as answering). `run` returns: any service failed → existing FAILED error; else non-zero library code → `ExitError::new(code, "start: library palace unavailable")`; else 0. Services are never skipped because of the library (FR-009)
+- [X] T032 [US3] Make T029–T030 pass; `cargo test`, clippy green
 
 ## Phase 6: Polish & Cross-Cutting
 
