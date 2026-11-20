@@ -10,7 +10,7 @@ pub mod net;
 pub mod ufw;
 
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -38,6 +38,8 @@ pub struct Cmd {
     pub root: Root,
     /// Inherit the terminal instead of capturing output (prompts, progress).
     pub interactive: bool,
+    /// Extra environment variables for the child; not shown by [`Cmd::line`].
+    pub env: Vec<(String, String)>,
 }
 
 impl Cmd {
@@ -48,6 +50,7 @@ impl Cmd {
             stdin: None,
             root: Root::No,
             interactive: false,
+            env: Vec::new(),
         }
     }
 
@@ -78,6 +81,18 @@ impl Cmd {
 
     pub fn interactive(mut self) -> Self {
         self.interactive = true;
+        self
+    }
+
+    /// Set one environment variable for the child.
+    pub fn env(mut self, k: &str, v: &str) -> Self {
+        self.env.push((k.to_string(), v.to_string()));
+        self
+    }
+
+    /// Set several environment variables for the child, in order.
+    pub fn envs(mut self, pairs: &[(String, String)]) -> Self {
+        self.env.extend(pairs.iter().cloned());
         self
     }
 
@@ -160,7 +175,13 @@ pub trait System {
     fn remove_user_file(&self, path: &Path) -> Result<()>;
     fn remove_dir_all(&self, path: &Path) -> Result<()>;
     /// HTTP status of `GET <path>` on `127.0.0.1:<port>`; `None` on no answer in `timeout`.
-    fn http_status(&self, port: u16, path: &str, timeout: Duration) -> Option<u16>;
+    fn http_status(&self, port: u16, path: &str, timeout: Duration) -> Option<u16> {
+        self.http_status_at("127.0.0.1", port, path, timeout)
+    }
+    /// HTTP status of `GET <path>` on `<host>:<port>`; `None` on no answer in `timeout`.
+    fn http_status_at(&self, host: &str, port: u16, path: &str, timeout: Duration) -> Option<u16>;
+    /// The path with symlinks resolved; `None` when it does not exist.
+    fn canonical(&self, path: &Path) -> Option<PathBuf>;
     fn effective_uid(&self) -> u32;
     fn home_dir(&self) -> Option<PathBuf>;
     fn sleep(&self, duration: Duration);
@@ -237,6 +258,9 @@ impl System for RealSystem {
             }
         };
         command.args(&cmd.args);
+        for (k, v) in &cmd.env {
+            command.env(k, v);
+        }
         if cmd.stdin.is_some() {
             command.stdin(Stdio::piped());
         } else if !cmd.interactive {
@@ -364,12 +388,12 @@ impl System for RealSystem {
         std::fs::remove_dir_all(path).with_context(|| format!("cannot remove {}", path.display()))
     }
 
-    fn http_status(&self, port: u16, path: &str, timeout: Duration) -> Option<u16> {
-        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    fn http_status_at(&self, host: &str, port: u16, path: &str, timeout: Duration) -> Option<u16> {
+        let addr = (host, port).to_socket_addrs().ok()?.next()?;
         let mut stream = TcpStream::connect_timeout(&addr, timeout).ok()?;
         stream.set_read_timeout(Some(timeout)).ok()?;
         stream.set_write_timeout(Some(timeout)).ok()?;
-        let request = format!("GET {path} HTTP/1.0\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let request = format!("GET {path} HTTP/1.0\r\nHost: {host}:{port}\r\n\r\n");
         stream.write_all(request.as_bytes()).ok()?;
         let mut buf = [0u8; 256];
         let mut got = Vec::new();
@@ -380,6 +404,10 @@ impl System for RealSystem {
             }
         }
         parse_status_line(&got)
+    }
+
+    fn canonical(&self, path: &Path) -> Option<PathBuf> {
+        std::fs::canonicalize(path).ok()
     }
 
     fn effective_uid(&self) -> u32 {
@@ -420,5 +448,20 @@ mod tests {
         assert_eq!(parse_status_line(b"HTTP/1.1 503\r\n"), Some(503));
         assert_eq!(parse_status_line(b"SSH-2.0-OpenSSH\r\n"), None);
         assert_eq!(parse_status_line(b""), None);
+    }
+
+    #[test]
+    fn cmd_env_building() {
+        let c = Cmd::new("x").env("A", "1").env("B", "2");
+        assert_eq!(
+            c.env,
+            vec![("A".into(), "1".into()), ("B".into(), "2".into())]
+        );
+        let pairs = vec![("C".to_string(), "3".to_string())];
+        let c = c.envs(&pairs);
+        assert_eq!(c.env.len(), 3);
+        assert_eq!(c.env[2], ("C".to_string(), "3".to_string()));
+        assert_eq!(c.line(), "x");
+        assert!(Cmd::new("y").env.is_empty());
     }
 }

@@ -1,0 +1,63 @@
+# hypostasis.yaml — THE single authority for config/wiring on this host (Principle V).
+# Hand-edited; derived component configs are rendered from it (`hypostasis apply`).
+# Created 2026-10-24 from hypostasis.example.yaml. GM choices: mode dev; campaigns tree
+# ~/phandalin (+ ~/out-of-the-abyss, ~/obelisk, 2026-10-25; ~/toee, 2026-10-28); embeddings from Ollama at 192.168.56.1:11434 (qwen3-embedding:0.6b).
+
+venv: ~/.venvs/main
+
+mode: dev                         # path components install editable (-e); pins optional, unenforced
+installer: uv                     # ~/.venvs/main has no pip
+
+machines:
+  dgx:
+    endpoint: http://192.168.1.121:8001/v1      # spark2 Gemma (GM choice 2026-10-24)
+    default_model: google/gemma-4-26B-A4B-it
+
+mneme:
+  id: 00000000-0000-0000-0000-000000000000       # placeholder (real id removed)
+
+data_roots:
+  fivetools: ~/src/5e-tools-kostadis/data
+  campaigns:
+    - ~/phandalin
+    - ~/out-of-the-abyss
+    - ~/obelisk
+    - ~/toee
+  mempalace: ~/.mempalace
+  homebrew: ~/src/homebrew-private
+  fivetools_mcp_index: ~/src/5e-tools-kostadis/mcp/index.js
+  pdf_translators: ~/src/mytools/pdf-translators
+  rpg_library_db: ~/src/mytools/rpg-lib/rpg_library.db
+
+env:
+  MEMPALACE_BACKEND: turbovec
+  MEMPALACE_EMBEDDING_PROVIDER: ollama
+  MEMPALACE_EMBEDDING_MODEL: qwen3-embedding:0.6b
+  MEMPALACE_EMBEDDING_ENDPOINT: http://192.168.56.1:11434
+
+services:
+  dgx:
+    url: http://192.168.1.121:8001/v1
+    managed: false
+    health: { type: http, path: /v1/models }
+  rpg_lib:
+    url: http://localhost:8000
+    port: 8000
+    managed: false
+    health: { type: http, path: / }
+
+components:
+  dgxlib:
+    source: { path: ~/src/dgx-fun }
+  turbovecdb:
+    source: { path: ~/src/turbovecdb }
+  mempalace:
+    source: { path: ~/src/Mempalace }
+  CampaignGenerator:
+    source: { path: ~/src/CampaignGenerator }
+    config_template: campaigngenerator.wiring.yaml.j2
+    config_target: ~/.config/campaigngenerator/wiring.yaml
+
+order:
+  install: [dgxlib, turbovecdb, mempalace, CampaignGenerator]
+  startup: [dgx, rpg_lib]
