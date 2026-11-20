@@ -50,11 +50,13 @@ pub enum ExportAction {
 #[derive(Subcommand, Debug, Clone, Copy)]
 pub enum HypostasisAction {
     /// Install and configure everything mneme and the local services need (may need sudo;
-    /// re-runnable; starts nothing)
+    /// re-runnable; builds the library palace if missing; starts nothing)
     Setup,
-    /// Start rpg-lib, flexai-social and flexai-combat, persistently (never prompts)
+    /// Start rpg-lib, flexai-social and flexai-combat, persistently, then check the library
+    /// palace can be searched (never prompts)
     Start,
-    /// Report what is in place, what is missing, and what is running (never prompts)
+    /// Report what is in place, what is missing, and what is running, including the library
+    /// palace (never prompts)
     Status,
     /// Stop the local services, persistently (never prompts)
     Stop,

@@ -39,6 +39,10 @@ local-machine [--config-dir DIR] hypostasis <action>
 | 4 | Not set up (start: a service not ready; status: a piece missing) |
 | 5 | status only: set up, but a service is not running under this tool's control |
 
+Spec 003 adds the library palace: `status` and `start` may also exit 3 or 4 for a
+library-only problem, and 1 for an embedder mismatch or live-palace refusal
+(`specs/003-dmsguild-library-palace/contracts/cli.md`).
+
 ## `hypostasis setup`
 
 - Puts each missing piece in place in data-model order; reports each `ok:`/`changed:`.

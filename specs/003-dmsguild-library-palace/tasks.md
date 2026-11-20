@@ -105,11 +105,11 @@ the end (T038–T039); anything after that becomes a GitHub issue (T040), not a 
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T033 [P] Add `library:` block (defaults from CampaignGenerator 044 `contracts/authority-config.md`, `selection.product_types: [adventure, setting, gm_aid]`) to `~/src/hypostasis-config/hypostasis.yaml` on a new branch `003-library-block` in that repo; commit there (research R11). Do not edit `~/.config/hypostasis/hypostasis.yaml` from code; the owner copies the block by hand or re-seeds
-- [ ] T034 [P] Update specs/002-hypostasis-setup/contracts/cli.md `## Exit codes` with a pointer: "status may also exit 3 for a library-only problem (spec 003)"; and README/`--help` text for `hypostasis status` in src/cli.rs if it lists what status covers
-- [ ] T035 Run the full quickstart.md "Automated" section: `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
+- [X] T033 [P] Add `library:` block (defaults from CampaignGenerator 044 `contracts/authority-config.md`, `selection.product_types: [adventure, setting, gm_aid]`) to `~/src/hypostasis-config/hypostasis.yaml` on a new branch `003-library-block` in that repo; commit there (research R11). Do not edit `~/.config/hypostasis/hypostasis.yaml` from code; the owner copies the block by hand or re-seeds
+- [X] T034 [P] Update specs/002-hypostasis-setup/contracts/cli.md `## Exit codes` with a pointer: "status may also exit 3 for a library-only problem (spec 003)"; and README/`--help` text for `hypostasis status` in src/cli.rs if it lists what status covers
+- [X] T035 Run the full quickstart.md "Automated" section: `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
 - [ ] T036 Manual quickstart.md steps 1–6 on the machine, once CampaignGenerator 044 is merged and `~/.venvs/main/bin/library` exists; record results (pass/fail per step) at the bottom of specs/003-dmsguild-library-palace/quickstart.md. Blocked on 044 — skip and say so if it is not merged
-- [ ] T037 Re-check contracts/cli.md and research.md against CampaignGenerator 044's committed `contracts/cli.md` and `authority-config.md`; note any drift in research.md
+- [X] T037 Re-check contracts/cli.md and research.md against CampaignGenerator 044's committed `contracts/cli.md` and `authority-config.md`; note any drift in research.md
 
 ## Phase 7: Review & Close
 

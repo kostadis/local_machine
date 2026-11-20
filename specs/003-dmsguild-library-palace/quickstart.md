@@ -44,3 +44,12 @@ even when the library is down; no prompt in any library path (`FakeSystem::promp
 6. **Live-palace guard** (SC-006): in the scratch authority set
    `library.palace: ~/.mempalace/palaces/x`; setup refuses before building and nothing is
    created under `~/.mempalace`.
+
+## Results
+
+- 2026-11-20 — Automated: `cargo test`, `cargo clippy --all-targets -- -D warnings`,
+  `cargo fmt --check` all pass.
+- 2026-11-20 — Manual steps 1–6: **not run.** `~/.venvs/main/bin/library` does not exist
+  yet (CampaignGenerator must be reinstalled at a commit with the 044 `library` command),
+  and the live authority `~/.config/hypostasis/hypostasis.yaml` has no `library:` block
+  (added to `hypostasis-config` on branch `003-library-block`, not yet merged or copied).

@@ -160,3 +160,11 @@ Context is resolved here.
 ## R13. Parameters (Constitution III)
 
 - No new flags. `setup | start | status` keep only `--config-dir`.
+
+## R14. Re-check against the committed 044 contracts (T037, 2026-11-20)
+
+The contracts are committed on CampaignGenerator `main` (23b5f10). The exit table, the
+`library status --json` fields, the `env:` merge rule and the `library:` keys are as used
+here. One drift, on CampaignGenerator's side: `authority-config.md` says `rpg_library_db` is
+read from "the file's existing top-level key", but the authority keeps it at
+`data_roots.rpg_library_db`. Filed as an issue (T040), not fixed here.
