@@ -66,3 +66,12 @@ even when the library is down; no prompt in any library path (`FakeSystem::promp
   The first refresh attempt ran at ~26 files/min: every per-file `where=source_file`
   lookup in turbovecdb was a full table scan. Fixed in turbovecdb #126 (expression
   index), after which mining ran at ~359 files/min.
+- 2026-11-21 — Step 4 (embedder down), on a scratch authority with
+  `MEMPALACE_EMBEDDING_ENDPOINT: http://127.0.0.1:1`, so the live ollama is never stopped:
+  `start` → services `ok:`, `error: library palace: unavailable — embedder
+  http://127.0.0.1:1 not answering`, exit 1. **Pass.**
+- 2026-11-21 — Step 6 (live-palace guard), on a scratch authority with
+  `library.palace: ~/.mempalace/palaces/x`: nothing built, nothing created under
+  `~/.mempalace` (SC-006 holds); `status` → `error: ... overlaps a live palace`, exit 1.
+  **But setup** printed `ok: library palace (present; ...)` and exited 0 instead of
+  refusing: CampaignGenerator's exit 6 is read as an existing library. Filed as #9.
