@@ -54,6 +54,10 @@ error: library palace: library status failed (exit <n>): <message>
 Exit precedence: any other piece missing → 4; else library → 3 / 4 / 1 (3 and 4 passed
 through, 5, 6 and others → 1); else services not all running → 5; else 0.
 
+A missing `<venv>/bin/library` is reported before `library status` runs and maps to 4
+("not set up"), the same as "not built": `local-machine hypostasis setup` fixes both, and
+the fix line tells them apart (#4, decided 2026-11-21). The same applies to `start`.
+
 ## `start`
 
 Services are started first, unchanged. Then:
