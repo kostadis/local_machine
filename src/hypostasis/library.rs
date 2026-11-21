@@ -290,6 +290,14 @@ impl<'a> LibraryPalace<'a> {
         }
     }
 
+    /// The refusal for a palace that overlaps a live one; same wording as `status`.
+    fn live_palace_refusal(&self, m: &str) -> String {
+        format!(
+            "overlaps a live palace ({m}) — change library.palace in {}",
+            self.ctx.cfg.authority.display()
+        )
+    }
+
     /// P1, P3..P5 in order (P2, the command, is fixed by `apply` before this runs); the first
     /// failure is `<reason> — <fix>`.
     fn preconditions(&self, sys: &dyn System, a: &Authority) -> Result<LibraryKeys, String> {
@@ -337,9 +345,10 @@ impl Step for LibraryPalace<'_> {
         }
         Ok(match observe(sys, &a) {
             LibraryState::Ready { books, .. } => Check::DoneWith(format!("{books} books")),
-            LibraryState::EmbedderMismatch(_) | LibraryState::LivePalace(_) => {
+            LibraryState::EmbedderMismatch(_) => {
                 Check::DoneWith("present; see 'local-machine hypostasis status'".into())
             }
+            LibraryState::LivePalace(m) => Check::NeedsChange(self.live_palace_refusal(&m)),
             LibraryState::NotBuilt(_) => Check::NeedsChange(match self.preconditions(sys, &a) {
                 Err(e) => e,
                 Ok(_) => "not built".into(),
@@ -373,6 +382,9 @@ impl Step for LibraryPalace<'_> {
             Err(e) => bail!("{e}"),
         };
         if sys.path_kind(&keys.palace) != PathKind::Missing {
+            if let LibraryState::LivePalace(m) = observe(sys, &a) {
+                bail!("{}", self.live_palace_refusal(&m));
+            }
             bail!(
                 "{} occupied (not a built library); not touched",
                 keys.palace.display()
@@ -404,17 +416,13 @@ impl Step for LibraryPalace<'_> {
             .map(|o| o.code);
         match code {
             Ok(0) => {}
-            Ok(n) => {
-                self.remove_partial(sys, &keys);
-                bail!("build failed (exit {n}); removed the partial palace");
-            }
-            Err(e) => {
-                self.remove_partial(sys, &keys);
-                bail!("build failed ({e}); removed the partial palace");
-            }
+            Ok(n) => return self.build_failed(sys, &keys, &format!("build failed (exit {n})")),
+            Err(e) => return self.build_failed(sys, &keys, &format!("build failed ({e})")),
         }
         match observe(sys, &a) {
             LibraryState::Ready { books, .. } => {
+                // Built and verified: nothing to undo, so a later rollback must not remove it.
+                self.created = false;
                 say!("note: library palace: {books} books");
                 Ok(())
             }
@@ -427,8 +435,7 @@ impl Step for LibraryPalace<'_> {
                     | LibraryState::Failed(m) => m,
                     LibraryState::Ready { .. } => String::new(),
                 };
-                self.remove_partial(sys, &keys);
-                bail!("built but library status says: {msg}; removed the partial palace");
+                self.build_failed(sys, &keys, &format!("built but library status says: {msg}"))
             }
         }
     }
@@ -439,7 +446,7 @@ impl Step for LibraryPalace<'_> {
             && let Ok(keys) = &a.library
             && guard(sys, self.ctx, &a, keys).is_ok()
         {
-            self.remove_partial(sys, keys);
+            let _ = self.remove_partial(sys, keys);
         }
         Ok(())
     }
@@ -452,11 +459,25 @@ impl Step for LibraryPalace<'_> {
 impl LibraryPalace<'_> {
     /// Remove `keys.palace` and nothing else; callers reach this only after the guard passed
     /// and only when the path did not exist before this apply (`created`).
-    fn remove_partial(&mut self, sys: &dyn System, keys: &LibraryKeys) {
-        if self.created && sys.path_kind(&keys.palace) != PathKind::Missing {
-            let _ = sys.remove_dir_all(&keys.palace);
-        }
+    fn remove_partial(&mut self, sys: &dyn System, keys: &LibraryKeys) -> Result<()> {
+        let removed = if self.created && sys.path_kind(&keys.palace) != PathKind::Missing {
+            sys.remove_dir_all(&keys.palace)
+        } else {
+            Ok(())
+        };
         self.created = false;
+        removed
+    }
+
+    /// Remove the partial palace and fail with `what`, saying whether the removal worked.
+    fn build_failed(&mut self, sys: &dyn System, keys: &LibraryKeys, what: &str) -> Result<()> {
+        match self.remove_partial(sys, keys) {
+            Ok(()) => bail!("{what}; removed the partial palace"),
+            Err(e) => bail!(
+                "{what}; could not remove the partial palace at {}: {e} — remove it by hand, then run '{SETUP}'",
+                keys.palace.display()
+            ),
+        }
     }
 }
 
@@ -555,6 +576,76 @@ mod tests {
         let a = authority();
         observe(&s, &a);
         assert_eq!(s.env_of(&format!("{LIB} status")), Some(a.env.clone()));
+    }
+
+    const PALACE: &str = "/home/kostadis/.local/share/hypostasis/library/palace";
+
+    /// A machine where the palace is missing and a build makes it; `status` says built only
+    /// once the palace exists.
+    fn buildable() -> FakeSystem {
+        let s = sys_with_lib();
+        s.set_file(AUTH, include_str!("../../tests/fixtures/authority.yaml"));
+        s.set_file("/home/kostadis/src/mytools/rpg-lib/rpg_library.db", "db");
+        s.set_dir("/mnt/g/My Drive/DriveThru/Dungeon Masters Guild", 1000);
+        s.set_http_at("192.168.56.1", 11434, &[Some(200)]);
+        s.respond_fn(&format!("{LIB} status"), |s, _| {
+            if s.has_dir(PALACE) {
+                Output::ok(r#"{"books": 2}"#)
+            } else {
+                Output::fail(4, "not built")
+            }
+        });
+        s.on_prefix(&format!("{LIB} build"), |s, _| s.set_dir(PALACE, 1000));
+        s
+    }
+
+    #[test]
+    fn rollback_after_a_successful_build_removes_nothing() {
+        let ctx = context();
+        let s = buildable();
+        let mut step = LibraryPalace::new(&ctx);
+        step.apply(&s).unwrap();
+        step.rollback(&s).unwrap();
+        assert!(s.calls().iter().all(|c| !c.starts_with("rmdir ")));
+        assert!(s.has_dir(PALACE));
+    }
+
+    #[test]
+    fn failed_build_and_failed_removal_says_so() {
+        let ctx = context();
+        let s = buildable();
+        s.respond_fn(&format!("{LIB} build"), |s, _| {
+            s.set_dir(PALACE, 1000);
+            Output::fail(1, "boom")
+        });
+        s.fail_remove(PALACE);
+        let mut step = LibraryPalace::new(&ctx);
+        let e = format!("{:#}", step.apply(&s).unwrap_err());
+        assert!(e.starts_with("build failed (exit 1); could not remove the partial palace at "));
+        assert!(e.contains(PALACE) && e.contains("remove it by hand"), "{e}");
+        assert!(!e.contains("removed the partial palace"), "{e}");
+        assert!(s.has_dir(PALACE));
+    }
+
+    #[test]
+    fn live_palace_is_a_refusal_not_present() {
+        let ctx = context();
+        let s = buildable();
+        s.set_dir(PALACE, 1000);
+        s.respond_fn(&format!("{LIB} status"), |_, _| {
+            Output::fail(6, "overlaps x")
+        });
+        let want = format!(
+            "overlaps a live palace (overlaps x) — change library.palace in {}",
+            ctx.cfg.authority.display()
+        );
+        let mut step = LibraryPalace::new(&ctx);
+        match step.check(&s).unwrap() {
+            Check::NeedsChange(m) => assert_eq!(m, want),
+            _ => panic!("live palace must not be present"),
+        }
+        assert_eq!(format!("{}", step.apply(&s).unwrap_err()), want);
+        assert!(s.calls().iter().all(|c| !c.contains(" build")));
     }
 
     fn guard_for(palace: &str, s: &FakeSystem) -> Result<(), String> {

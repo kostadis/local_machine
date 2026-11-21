@@ -630,19 +630,29 @@ fn existing_library_is_left_alone() {
     assert!(has_line(&lines, "ok: library palace (2 books)"));
     assert!(m.calls_matching(BUILD).is_empty());
     assert!(!m.sys.prompted());
-    for st in [5, 6] {
-        m.sys
-            .respond_fn(STATUS, move |_, _| Output::fail(st, "something"));
-        let (code, lines) = setup(&m);
-        assert_eq!(code, Ok(0), "{st}: {lines:#?}");
-        assert!(has_line(
-            &lines,
-            "ok: library palace (present; see 'local-machine hypostasis status')"
-        ));
-        assert!(m.calls_matching(BUILD).is_empty());
-        assert!(rmdirs(&m).is_empty());
-    }
+    m.sys
+        .respond_fn(STATUS, |_, _| Output::fail(5, "something"));
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Ok(0), "{lines:#?}");
+    assert!(has_line(
+        &lines,
+        "ok: library palace (present; see 'local-machine hypostasis status')"
+    ));
+    assert!(m.calls_matching(BUILD).is_empty());
+    assert!(rmdirs(&m).is_empty());
     assert!(!m.sys.prompted());
+}
+
+#[test]
+fn live_palace_overlap_is_refused_by_setup() {
+    // #9: a live-palace overlap is a refusal, not "present".
+    let m = Machine::set_up();
+    m.sys
+        .respond_fn(STATUS, |_, _| Output::fail(6, "overlaps x"));
+    refused(
+        &m,
+        &format!("overlaps a live palace (overlaps x) — change library.palace in {AUTHORITY}"),
+    );
 }
 
 fn refused(m: &Machine, expect: &str) {
@@ -855,6 +865,25 @@ fn failed_build_removes_the_partial_palace() {
     assert!(!m.sys.has_dir(PALACE));
     assert_eq!(rmdirs(&m), [format!("rmdir {PALACE}")]);
     assert!(!m.sys.prompted());
+}
+
+#[test]
+fn failed_build_with_failed_removal_names_the_path() {
+    let m = without_palace();
+    m.sys.respond_fn(BUILD, |s, _| {
+        s.set_dir(PALACE, 1000);
+        Output::fail(1, "boom")
+    });
+    m.sys.fail_remove(PALACE);
+    let (code, lines) = setup(&m);
+    assert_eq!(code, Err(1), "{lines:#?}");
+    let line = lines
+        .iter()
+        .find(|l| l.starts_with("error: library palace: build failed (exit 1)"))
+        .unwrap_or_else(|| panic!("{lines:#?}"));
+    assert!(line.contains(&format!("could not remove the partial palace at {PALACE}")));
+    assert!(line.contains("remove it by hand"));
+    assert!(!line.contains("; removed the partial palace"));
 }
 
 #[test]

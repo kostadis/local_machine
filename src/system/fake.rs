@@ -47,6 +47,8 @@ pub struct FakeSystem {
     pub euid: Cell<u32>,
     pub home: RefCell<Option<PathBuf>>,
     pub user: Option<String>,
+    /// Paths whose `remove_dir_all` fails (scripted by `fail_remove`).
+    pub remove_failures: RefCell<Vec<PathBuf>>,
 }
 
 impl FakeSystem {
@@ -150,6 +152,11 @@ impl FakeSystem {
             .rev()
             .find(|(_, c)| c.starts_with(line_prefix))
             .and_then(|(i, _)| envs.get(i).cloned())
+    }
+
+    /// Make `remove_dir_all(path)` fail (it is still recorded, and removes nothing).
+    pub fn fail_remove(&self, path: &str) {
+        self.remove_failures.borrow_mut().push(PathBuf::from(path));
     }
 
     pub fn set_euid(&self, uid: u32) {
@@ -365,6 +372,9 @@ impl System for FakeSystem {
 
     fn remove_dir_all(&self, path: &Path) -> Result<()> {
         self.record(format!("rmdir {}", path.display()));
+        if self.remove_failures.borrow().iter().any(|p| p == path) {
+            bail!("permission denied");
+        }
         self.dirs.borrow_mut().retain(|p, _| !p.starts_with(path));
         self.files.borrow_mut().retain(|p, _| !p.starts_with(path));
         Ok(())
