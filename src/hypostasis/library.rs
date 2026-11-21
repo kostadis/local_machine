@@ -446,7 +446,12 @@ impl Step for LibraryPalace<'_> {
             && let Ok(keys) = &a.library
             && guard(sys, self.ctx, &a, keys).is_ok()
         {
-            let _ = self.remove_partial(sys, keys);
+            self.remove_partial(sys, keys).map_err(|e| {
+                anyhow::anyhow!(
+                    "could not remove the partial palace at {}: {e} — remove it by hand, then run '{SETUP}'",
+                    keys.palace.display()
+                )
+            })?;
         }
         Ok(())
     }
@@ -597,6 +602,19 @@ mod tests {
         });
         s.on_prefix(&format!("{LIB} build"), |s, _| s.set_dir(PALACE, 1000));
         s
+    }
+
+    #[test]
+    fn rollback_reports_a_failed_removal() {
+        let ctx = context();
+        let s = buildable();
+        s.set_dir(PALACE, 1000);
+        s.fail_remove(PALACE);
+        let mut step = LibraryPalace::new(&ctx);
+        step.created = true; // as if apply stopped mid-build
+        let e = format!("{:#}", step.rollback(&s).unwrap_err());
+        assert!(e.contains(PALACE) && e.contains("remove it by hand"), "{e}");
+        assert!(s.has_dir(PALACE));
     }
 
     #[test]
