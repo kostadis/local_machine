@@ -55,3 +55,14 @@ even when the library is down; no prompt in any library path (`FakeSystem::promp
   (added to `hypostasis-config` on branch `003-library-block`, not yet merged or copied).
 - 2026-11-20 — Review: one pass (re-run once, scoped, after the first run was cut off). No
   confirmed findings. Follow-ups filed: local_machine #2–#6, CampaignGenerator #671.
+- 2026-11-20 — Manual step 1 (build): first build with a narrow selection, 322 books /
+  6,359 passages in 2,760 s, `embedder_match: true` with `MEMPALACE_BACKEND=chroma` in the
+  shell (SC-003). Step 2: identical checksums on re-run (SC-002). Step 3: status exit 0.
+  Step 4 skipped (the embedder is shared and in use). Step 5: exit 3.
+- 2026-11-21 — Selection widened to `all_converted: true` (owner's decision). `library
+  refresh` added 287 books: 609 books / 17,340 passages, 0 failed, 2,297 s. No duplicate
+  drawers (no repeated source_file + chunk_index). `local-machine hypostasis status` →
+  `ok: library palace (609 books, 1224 MB)`, no stale note; `--config` passed (#8 verified).
+  The first refresh attempt ran at ~26 files/min: every per-file `where=source_file`
+  lookup in turbovecdb was a full table scan. Fixed in turbovecdb #126 (expression
+  index), after which mining ran at ~359 files/min.
