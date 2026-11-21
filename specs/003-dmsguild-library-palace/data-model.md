@@ -59,13 +59,13 @@ P1–P5 run in setup's `check()` (look only). P6 runs in `apply()` just before t
            observe()
               │
    ┌──────────┼───────────────┬──────────────────────┐
- Ready /   NotBuilt &       NotBuilt &           NotConfigured / P1–P5 fail
- Mismatch / path missing    path exists           │
- LivePalace  │                 │                  ▼
- (any other) ▼                 ▼               refuse (failed piece)
-   │      preconditions     refuse: occupied
-   ▼         │ ok
- ok: present ▼
+ Ready /   NotBuilt &       NotBuilt &           NotConfigured / LivePalace /
+ Mismatch    path missing    path exists          P1–P5 fail
+ (any other) │                 │                  │
+   │         ▼                 ▼                  ▼
+   ▼      preconditions     refuse: occupied   refuse (failed piece)
+ ok: present  │ ok
+              ▼
           build (interactive) ──fail──► remove palace path (created this run) ► failed
              │ ok
           observe() ──not Ready──► remove palace path ► failed
@@ -73,9 +73,10 @@ P1–P5 run in setup's `check()` (look only). P6 runs in `apply()` just before t
           changed: library palace (N books)
 ```
 
-Setup never moves an existing library to another state (FR-004). A mismatched or
-live-palace library is reported `ok: library palace (present; see status)` by setup, and
-status reports the problem.
+Setup never moves an existing library to another state (FR-004). A mismatched
+library is reported `ok: library palace (present; see status)` by setup, and status reports
+the problem. A live-palace overlap (exit 6) is a refusal, not "present": setup fails the
+piece with `overlaps a live palace (<m>) — change library.palace in <authority>` (#9).
 
 ## System trait additions (`src/system/mod.rs`)
 
